@@ -1,0 +1,96 @@
+import 'package:dio/dio.dart';
+import 'package:server_core/server_core.dart';
+
+import 'api/jellyfin_auth_api.dart';
+import 'api/jellyfin_items_api.dart';
+import 'api/jellyfin_playback_api.dart';
+import 'api/jellyfin_image_api.dart';
+import 'api/jellyfin_session_api.dart';
+import 'api/jellyfin_system_api.dart';
+import 'api/jellyfin_user_library_api.dart';
+import 'api/jellyfin_user_views_api.dart';
+import 'api/jellyfin_live_tv_api.dart';
+
+/// Jellyfin implementation of [MediaServerClient].
+class JellyfinMediaServerClient extends MediaServerClient {
+  final Dio _dio;
+
+  JellyfinMediaServerClient({
+    required String baseUrl,
+    required DeviceInfo deviceInfo,
+  }) : _dio = Dio(BaseOptions(baseUrl: baseUrl)) {
+    _baseUrl = baseUrl;
+    _setupInterceptors(deviceInfo);
+  }
+
+  late String _baseUrl;
+  String? _accessToken;
+
+  void _setupInterceptors(DeviceInfo deviceInfo) {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final authHeader = StringBuffer(
+          'MediaBrowser Client="${deviceInfo.appName}", '
+          'Device="${deviceInfo.name}", '
+          'DeviceId="${deviceInfo.id}", '
+          'Version="${deviceInfo.appVersion}"',
+        );
+        if (_accessToken != null) {
+          authHeader.write(', Token="$_accessToken"');
+        }
+        options.headers['Authorization'] = authHeader.toString();
+        handler.next(options);
+      },
+    ));
+  }
+
+  @override
+  ServerType get serverType => ServerType.jellyfin;
+
+  @override
+  String get baseUrl => _baseUrl;
+
+  @override
+  set baseUrl(String url) {
+    _baseUrl = url;
+    _dio.options.baseUrl = url;
+  }
+
+  @override
+  String? get accessToken => _accessToken;
+
+  @override
+  set accessToken(String? token) => _accessToken = token;
+
+  @override
+  late final AuthApi authApi = JellyfinAuthApi(_dio);
+
+  @override
+  late final ItemsApi itemsApi = JellyfinItemsApi(_dio);
+
+  @override
+  late final PlaybackApi playbackApi = JellyfinPlaybackApi(_dio, _baseUrl);
+
+  @override
+  late final ImageApi imageApi = JellyfinImageApi(_baseUrl);
+
+  @override
+  late final SessionApi sessionApi = JellyfinSessionApi(_dio);
+
+  @override
+  late final SystemApi systemApi = JellyfinSystemApi(_dio);
+
+  @override
+  late final UserLibraryApi userLibraryApi = JellyfinUserLibraryApi(_dio);
+
+  @override
+  late final UserViewsApi userViewsApi = JellyfinUserViewsApi(_dio);
+
+  @override
+  late final LiveTvApi liveTvApi = JellyfinLiveTvApi(_dio);
+
+  @override
+  void dispose() {
+    _dio.close();
+  }
+}

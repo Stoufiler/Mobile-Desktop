@@ -1,0 +1,13 @@
+name: server_jellyfin
+description: Jellyfin server API implementation.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.7.2
+
+dependencies:
+  server_core:
+    path: ../server_core
+  dio: ^5.7.0
+  logger: ^2.5.0
