@@ -12,7 +12,9 @@ import '../../../preference/user_preferences.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/info_area.dart';
 import '../../widgets/library_row.dart';
+import '../../widgets/media_card.dart';
 import '../../widgets/responsive_layout.dart';
+import 'home_view_model.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -36,6 +38,7 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> {
   final _backgroundService = GetIt.instance<BackgroundService>();
   final _userPrefs = GetIt.instance<UserPreferences>();
+  late final HomeViewModel _viewModel;
 
   AggregatedItem? _selectedItem;
   String? _backdropUrl;
@@ -55,6 +58,10 @@ class _HomeShellState extends State<_HomeShell> {
       if (mounted) setState(() => _backdropUrl = url);
     });
     _backdropUrl = _backgroundService.currentUrl;
+
+    _viewModel = GetIt.instance<HomeViewModel>();
+    _viewModel.addListener(_onViewModelChanged);
+    _viewModel.load();
   }
 
   @override
@@ -62,7 +69,12 @@ class _HomeShellState extends State<_HomeShell> {
     _selectionDebounce?.cancel();
     _backdropDebounce?.cancel();
     _backgroundSub?.cancel();
+    _viewModel.removeListener(_onViewModelChanged);
     super.dispose();
+  }
+
+  void _onViewModelChanged() {
+    if (mounted) setState(() {});
   }
 
   void onItemSelected(AggregatedItem? item) {
@@ -118,7 +130,11 @@ class _HomeShellState extends State<_HomeShell> {
             right: 0,
             top: _contentTop,
             bottom: 0,
-            child: _ContentRows(onItemSelected: onItemSelected),
+            child: _ContentRows(
+              viewModel: _viewModel,
+              prefs: _userPrefs,
+              onItemSelected: onItemSelected,
+            ),
           ),
         ],
       ),
@@ -188,20 +204,77 @@ class _GradientScrim extends StatelessWidget {
 }
 
 class _ContentRows extends StatelessWidget {
+  final HomeViewModel viewModel;
+  final UserPreferences prefs;
   final ValueChanged<AggregatedItem?> onItemSelected;
 
-  const _ContentRows({required this.onItemSelected});
+  const _ContentRows({
+    required this.viewModel,
+    required this.prefs,
+    required this.onItemSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    final rows = viewModel.rows;
+    final posterSize = prefs.get(UserPreferences.posterSize);
+    final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
+
+    if (viewModel.isLoading && rows.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return ListView.builder(
       padding: const EdgeInsets.only(bottom: 32),
-      children: [
-        LibraryRow(title: 'Continue Watching', children: const []),
-        LibraryRow(title: 'Next Up', children: const []),
-        LibraryRow(title: 'Latest Media', children: const []),
-        LibraryRow(title: 'My Libraries', children: const []),
-      ],
+      itemCount: rows.length,
+      itemBuilder: (context, index) {
+        final row = rows[index];
+        if (row.isLoading) {
+          return LibraryRow(title: row.title, children: const []);
+        }
+        return LibraryRow(
+          title: row.title,
+          children: row.items.map((item) {
+            final ar = MediaCard.aspectRatioForType(item.type);
+            final height = ar > 1
+                ? posterSize.landscapeHeight.toDouble()
+                : posterSize.portraitHeight.toDouble();
+            final width = height * ar;
+            final imageUrl = item.primaryImageTag != null
+                ? viewModel.imageApi.getPrimaryImageUrl(
+                    item.id,
+                    maxHeight: (height * 2).toInt(),
+                    tag: item.primaryImageTag,
+                  )
+                : null;
+            return MediaCard(
+              title: item.name,
+              subtitle: _subtitle(item),
+              imageUrl: imageUrl,
+              width: width,
+              aspectRatio: ar,
+              isFavorite: item.isFavorite,
+              isPlayed: item.isPlayed,
+              unplayedCount: item.unplayedItemCount,
+              playedPercentage: item.playedPercentage,
+              watchedBehavior: watchedBehavior,
+              itemType: item.type,
+              onFocus: () => onItemSelected(item),
+              onTap: () => onItemSelected(item),
+            );
+          }).toList(),
+        );
+      },
     );
+  }
+
+  String? _subtitle(AggregatedItem item) {
+    if (item.type == 'Episode') {
+      final s = item.parentIndexNumber;
+      final e = item.indexNumber;
+      if (s != null && e != null) return 'S$s:E$e';
+    }
+    if (item.productionYear != null) return item.productionYear.toString();
+    return null;
   }
 }

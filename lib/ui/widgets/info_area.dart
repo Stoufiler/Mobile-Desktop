@@ -4,6 +4,7 @@ import 'package:server_core/server_core.dart';
 
 import '../../data/models/aggregated_item.dart';
 import 'logo_view.dart';
+import 'simple_info_row.dart';
 
 const _textShadows = [Shadow(blurRadius: 4, color: Colors.black54)];
 
@@ -58,7 +59,7 @@ class _InfoAreaContent extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           const SizedBox(height: 8),
-          _MetadataRow(item: item),
+          SimpleInfoRow(item: item),
           if (item.overview != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -81,56 +82,5 @@ class _InfoAreaContent extends StatelessWidget {
     if (tag == null) return null;
     final client = GetIt.instance<MediaServerClient>();
     return client.imageApi.getLogoImageUrl(item.id, maxWidth: 400, tag: tag);
-  }
-}
-
-class _MetadataRow extends StatelessWidget {
-  final AggregatedItem item;
-
-  const _MetadataRow({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final parts = <String>[];
-
-    if (item.productionYear != null) {
-      parts.add(item.productionYear.toString());
-    }
-
-    if (item.officialRating != null) {
-      parts.add(item.officialRating!);
-    }
-
-    final runtime = item.runtime;
-    if (runtime != null) {
-      final hours = runtime.inHours;
-      final minutes = runtime.inMinutes.remainder(60);
-      if (hours > 0) {
-        parts.add('${hours}h ${minutes}m');
-      } else {
-        parts.add('${minutes}m');
-      }
-    }
-
-    if (item.communityRating != null) {
-      parts.add('★ ${item.communityRating!.toStringAsFixed(1)}');
-    }
-
-    final genres = item.genres;
-    if (genres.isNotEmpty) {
-      parts.add(genres.take(3).join(', '));
-    }
-
-    if (parts.isEmpty) return const SizedBox.shrink();
-
-    return Text(
-      parts.join('  •  '),
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Colors.white.withValues(alpha: 0.8),
-            shadows: _textShadows,
-          ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
   }
 }

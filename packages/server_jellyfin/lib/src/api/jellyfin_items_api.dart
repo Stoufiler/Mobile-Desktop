@@ -87,7 +87,9 @@ class JellyfinItemsApi implements ItemsApi {
         'IncludeItemTypes': includeItemTypes.join(','),
       if (limit != null) 'Limit': limit,
     });
-    return response.data as Map<String, dynamic>;
+    final data = response.data;
+    if (data is List) return {'Items': data, 'TotalRecordCount': data.length};
+    return data as Map<String, dynamic>;
   }
 
   @override

@@ -42,15 +42,19 @@ class AggregatedItem {
   String? get logoImageTag =>
       (rawData['ImageTags'] as Map?)?['Logo'] as String?;
 
-  double? get playedPercentage {
-    final userData = rawData['UserData'] as Map?;
-    return userData?['PlayedPercentage'] as double?;
-  }
+  Map? get _userData => rawData['UserData'] as Map?;
 
-  bool get isPlayed {
-    final userData = rawData['UserData'] as Map?;
-    return userData?['Played'] as bool? ?? false;
-  }
+  double? get playedPercentage =>
+      _userData?['PlayedPercentage'] as double?;
+
+  bool get isPlayed =>
+      _userData?['Played'] as bool? ?? false;
+
+  bool get isFavorite =>
+      _userData?['IsFavorite'] as bool? ?? false;
+
+  int? get unplayedItemCount =>
+      _userData?['UnplayedItemCount'] as int?;
 
   String get displayTitle {
     if (type == 'Episode') {
