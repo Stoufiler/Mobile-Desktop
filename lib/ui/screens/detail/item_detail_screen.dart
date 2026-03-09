@@ -162,6 +162,7 @@ class _DetailContent extends StatelessWidget {
       'Person' => _buildPersonContent(item),
       'MusicArtist' => _buildArtistContent(item),
       'MusicAlbum' || 'Playlist' => _buildAlbumContent(item),
+      'BoxSet' => _buildBoxSetContent(item),
       _ => _buildMovieContent(item),
     };
   }
@@ -306,6 +307,42 @@ class _DetailContent extends StatelessWidget {
       if (viewModel.tracks.isNotEmpty) ...[
         const SizedBox(height: 24),
         _TrackList(tracks: viewModel.tracks),
+      ],
+      const SizedBox(height: 48),
+    ];
+  }
+
+  List<Widget> _buildBoxSetContent(AggregatedItem item) {
+    final movies = viewModel.collectionItems
+        .where((i) => i.type == 'Movie')
+        .toList();
+    final series = viewModel.collectionItems
+        .where((i) => i.type == 'Series')
+        .toList();
+    final other = viewModel.collectionItems
+        .where((i) => i.type != 'Movie' && i.type != 'Series')
+        .toList();
+
+    return [
+      _ActionButtons(viewModel: viewModel),
+      ..._overviewSection(item),
+      if (movies.isNotEmpty) ...[
+        const SizedBox(height: 32),
+        _SectionHeader(title: 'Movies'),
+        const SizedBox(height: 12),
+        _SimilarRow(items: movies, imageApi: viewModel.imageApi, prefs: prefs),
+      ],
+      if (series.isNotEmpty) ...[
+        const SizedBox(height: 32),
+        _SectionHeader(title: 'Series'),
+        const SizedBox(height: 12),
+        _SimilarRow(items: series, imageApi: viewModel.imageApi, prefs: prefs),
+      ],
+      if (other.isNotEmpty) ...[
+        const SizedBox(height: 32),
+        _SectionHeader(title: 'Other'),
+        const SizedBox(height: 12),
+        _SimilarRow(items: other, imageApi: viewModel.imageApi, prefs: prefs),
       ],
       const SizedBox(height: 48),
     ];

@@ -44,6 +44,9 @@ class ItemDetailViewModel extends ChangeNotifier {
   List<AggregatedItem> _tracks = const [];
   List<AggregatedItem> get tracks => _tracks;
 
+  List<AggregatedItem> _collectionItems = const [];
+  List<AggregatedItem> get collectionItems => _collectionItems;
+
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
@@ -98,6 +101,8 @@ class ItemDetailViewModel extends ChangeNotifier {
       futures.add(_loadSimilar());
     } else if (type == 'MusicAlbum' || type == 'Playlist') {
       futures.add(_loadTracks());
+    } else if (type == 'BoxSet') {
+      futures.add(_loadCollectionItems());
     } else {
       futures.add(_loadRatings());
       futures.add(_loadSimilar());
@@ -179,6 +184,19 @@ class ItemDetailViewModel extends ChangeNotifier {
       );
       final items = (data['Items'] as List?) ?? [];
       _tracks = _mapItems(items);
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> _loadCollectionItems() async {
+    try {
+      final data = await _client.itemsApi.getItems(
+        parentId: itemId,
+        sortBy: 'SortName',
+        fields: 'PrimaryImageAspectRatio,BasicSyncInfo',
+      );
+      final items = (data['Items'] as List?) ?? [];
+      _collectionItems = _mapItems(items);
       notifyListeners();
     } catch (_) {}
   }
