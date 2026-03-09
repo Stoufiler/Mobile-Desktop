@@ -68,6 +68,19 @@ class AggregatedItem {
   String? get status => rawData['Status'] as String?;
   int? get childCount => rawData['ChildCount'] as int?;
 
+  DateTime? get premiereDate {
+    final v = rawData['PremiereDate'] as String?;
+    return v != null ? DateTime.tryParse(v) : null;
+  }
+
+  DateTime? get endDate {
+    final v = rawData['EndDate'] as String?;
+    return v != null ? DateTime.tryParse(v) : null;
+  }
+
+  List<String> get productionLocations =>
+      (rawData['ProductionLocations'] as List?)?.cast<String>() ?? const [];
+
   Map<String, String> get providerIds {
     final ids = rawData['ProviderIds'] as Map?;
     return ids?.cast<String, String>() ?? const {};

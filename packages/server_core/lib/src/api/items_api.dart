@@ -9,6 +9,7 @@ abstract class ItemsApi {
     bool? recursive,
     String? searchTerm,
     String? fields,
+    List<String>? personIds,
   });
 
   Future<Map<String, dynamic>> getItem(String itemId);

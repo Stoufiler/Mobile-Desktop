@@ -18,6 +18,7 @@ class EmbyItemsApi implements ItemsApi {
     bool? recursive,
     String? searchTerm,
     String? fields,
+    List<String>? personIds,
   }) async {
     final userId = _getUserId();
     final response = await _dio.get(
@@ -33,6 +34,7 @@ class EmbyItemsApi implements ItemsApi {
         if (recursive != null) 'Recursive': recursive,
         if (searchTerm != null) 'SearchTerm': searchTerm,
         if (fields != null) 'Fields': fields,
+        if (personIds != null) 'PersonIds': personIds.join(','),
       },
     );
     return response.data as Map<String, dynamic>;

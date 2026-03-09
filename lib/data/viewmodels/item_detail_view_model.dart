@@ -23,6 +23,9 @@ class ItemDetailViewModel extends ChangeNotifier {
   List<AggregatedItem> _similar = const [];
   List<AggregatedItem> get similar => _similar;
 
+  List<AggregatedItem> _filmography = const [];
+  List<AggregatedItem> get filmography => _filmography;
+
   List<AggregatedItem> _seasons = const [];
   List<AggregatedItem> get seasons => _seasons;
 
@@ -74,13 +77,18 @@ class ItemDetailViewModel extends ChangeNotifier {
 
   Future<void> _loadSecondary() async {
     final type = _item?.type;
-    final futures = <Future>[_loadRatings()];
-    if (type == 'Series') {
+    final futures = <Future>[];
+    if (type == 'Person') {
+      futures.add(_loadFilmography());
+    } else if (type == 'Series') {
+      futures.add(_loadRatings());
       futures.add(_loadSeasons());
       futures.add(_loadNextUp());
     } else if (type == 'Season') {
+      futures.add(_loadRatings());
       futures.add(_loadEpisodes());
     } else {
+      futures.add(_loadRatings());
       futures.add(_loadSimilar());
     }
     await Future.wait(futures);
@@ -132,6 +140,23 @@ class ItemDetailViewModel extends ChangeNotifier {
       serverId: _client.baseUrl,
       rawData: raw,
     )).toList();
+  }
+
+  Future<void> _loadFilmography() async {
+    try {
+      final data = await _client.itemsApi.getItems(
+        personIds: [itemId],
+        includeItemTypes: ['Movie', 'Series'],
+        sortBy: 'PremiereDate',
+        sortOrder: 'Descending',
+        recursive: true,
+        limit: 50,
+        fields: 'PrimaryImageAspectRatio,BasicSyncInfo',
+      );
+      final items = (data['Items'] as List?) ?? [];
+      _filmography = _mapItems(items);
+      notifyListeners();
+    } catch (_) {}
   }
 
   Future<void> _loadSimilar() async {

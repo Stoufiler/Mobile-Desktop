@@ -137,7 +137,8 @@ class _DetailContent extends StatelessWidget {
         const _GradientScrim(),
         CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: _HeaderSection(viewModel: viewModel, prefs: prefs)),
+            if (item.type != 'Person')
+              SliverToBoxAdapter(child: _HeaderSection(viewModel: viewModel, prefs: prefs)),
             SliverPadding(
               padding: const EdgeInsets.symmetric(horizontal: 48),
               sliver: SliverList(
@@ -157,6 +158,7 @@ class _DetailContent extends StatelessWidget {
       'Series' => _buildSeriesContent(item),
       'Season' => _buildSeasonContent(item),
       'Episode' => _buildEpisodeContent(item),
+      'Person' => _buildPersonContent(item),
       _ => _buildMovieContent(item),
     };
   }
@@ -253,6 +255,23 @@ class _DetailContent extends StatelessWidget {
       if (item.seriesId != null) ...[
         const SizedBox(height: 32),
         _EpisodeNavigationRow(item: item),
+      ],
+      const SizedBox(height: 48),
+    ];
+  }
+
+  List<Widget> _buildPersonContent(AggregatedItem item) {
+    return [
+      _PersonHeader(item: item, imageApi: viewModel.imageApi),
+      if (item.overview != null && item.overview!.isNotEmpty) ...[
+        const SizedBox(height: 24),
+        _ExpandableBiography(text: item.overview!),
+      ],
+      if (viewModel.filmography.isNotEmpty) ...[
+        const SizedBox(height: 32),
+        _SectionHeader(title: 'Filmography'),
+        const SizedBox(height: 12),
+        _FilmographyRow(items: viewModel.filmography, imageApi: viewModel.imageApi, prefs: prefs),
       ],
       const SizedBox(height: 48),
     ];
@@ -1234,6 +1253,205 @@ class _EpisodeNavigationRow extends StatelessWidget {
             style: _navButtonStyle,
           ),
       ],
+    );
+  }
+}
+
+class _PersonHeader extends StatelessWidget {
+  final AggregatedItem item;
+  final ImageApi imageApi;
+
+  const _PersonHeader({required this.item, required this.imageApi});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    String? imageUrl;
+    if (item.primaryImageTag != null) {
+      imageUrl = imageApi.getPrimaryImageUrl(item.id, maxHeight: 400, tag: item.primaryImageTag);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 80),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 80,
+            backgroundColor: Colors.white.withValues(alpha: 0.1),
+            backgroundImage: imageUrl != null ? CachedNetworkImageProvider(imageUrl) : null,
+            child: imageUrl == null
+                ? const Icon(Icons.person, color: Colors.white54, size: 64)
+                : null,
+          ),
+          const SizedBox(width: 32),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                Text(
+                  item.name,
+                  style: theme.textTheme.headlineLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    shadows: _textShadows,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _PersonDates(item: item),
+                if (item.productionLocations.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      item.productionLocations.first,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        shadows: _textShadows,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonDates extends StatelessWidget {
+  final AggregatedItem item;
+
+  const _PersonDates({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final birth = item.premiereDate;
+    final death = item.endDate;
+    if (birth == null && death == null) return const SizedBox.shrink();
+
+    final parts = <String>[];
+    if (birth != null) {
+      parts.add('Born ${_formatDate(birth)}');
+    }
+    if (death != null) {
+      parts.add('Died ${_formatDate(death)}');
+    } else if (birth != null) {
+      final age = _calculateAge(birth);
+      if (age > 0) parts.add('Age $age');
+    }
+
+    return Text(
+      parts.join('  \u2022  '),
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        color: Colors.white.withValues(alpha: 0.7),
+        shadows: _textShadows,
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  int _calculateAge(DateTime birth) {
+    final now = DateTime.now();
+    var age = now.year - birth.year;
+    if (now.month < birth.month || (now.month == birth.month && now.day < birth.day)) {
+      age--;
+    }
+    return age;
+  }
+}
+
+class _ExpandableBiography extends StatefulWidget {
+  final String text;
+
+  const _ExpandableBiography({required this.text});
+
+  @override
+  State<_ExpandableBiography> createState() => _ExpandableBiographyState();
+}
+
+class _ExpandableBiographyState extends State<_ExpandableBiography> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodyLarge?.copyWith(
+      color: Colors.white.withValues(alpha: 0.9),
+      shadows: _textShadows,
+      height: 1.5,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedCrossFade(
+          firstChild: Text(widget.text, style: style, maxLines: 4, overflow: TextOverflow.ellipsis),
+          secondChild: Text(widget.text, style: style),
+          crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 300),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Text(
+            _expanded ? 'Show Less' : 'Read More',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF00A4DC),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FilmographyRow extends StatelessWidget {
+  final List<AggregatedItem> items;
+  final ImageApi imageApi;
+  final UserPreferences prefs;
+
+  const _FilmographyRow({required this.items, required this.imageApi, required this.prefs});
+
+  @override
+  Widget build(BuildContext context) {
+    final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
+
+    return SizedBox(
+      height: 280,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final year = item.productionYear;
+
+          return MediaCard(
+            title: item.name,
+            subtitle: year?.toString(),
+            imageUrl: item.primaryImageTag != null
+                ? imageApi.getPrimaryImageUrl(item.id, maxHeight: 400, tag: item.primaryImageTag)
+                : null,
+            width: 150,
+            aspectRatio: 2 / 3,
+            isFavorite: item.isFavorite,
+            isPlayed: item.isPlayed,
+            playedPercentage: item.playedPercentage,
+            watchedBehavior: watchedBehavior,
+            itemType: item.type,
+            onTap: () => context.go(Destinations.item(item.id)),
+          );
+        },
+      ),
     );
   }
 }

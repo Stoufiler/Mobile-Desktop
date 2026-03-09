@@ -17,6 +17,7 @@ class JellyfinItemsApi implements ItemsApi {
     bool? recursive,
     String? searchTerm,
     String? fields,
+    List<String>? personIds,
   }) async {
     final response = await _dio.get('/Items', queryParameters: {
       if (parentId != null) 'ParentId': parentId,
@@ -29,6 +30,7 @@ class JellyfinItemsApi implements ItemsApi {
       if (recursive != null) 'Recursive': recursive,
       if (searchTerm != null) 'SearchTerm': searchTerm,
       if (fields != null) 'Fields': fields,
+      if (personIds != null) 'PersonIds': personIds.join(','),
     });
     return response.data as Map<String, dynamic>;
   }
