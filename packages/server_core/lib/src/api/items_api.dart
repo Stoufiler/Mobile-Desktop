@@ -58,4 +58,12 @@ abstract class ItemsApi {
   });
 
   Future<void> addToPlaylist(String playlistId, List<String> itemIds);
+
+  Future<Map<String, dynamic>> getGenres({
+    String? parentId,
+    String? sortBy,
+    String? sortOrder,
+    int? startIndex,
+    int? limit,
+  });
 }

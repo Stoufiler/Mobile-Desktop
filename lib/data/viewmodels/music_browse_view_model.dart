@@ -56,6 +56,15 @@ class MusicBrowseViewModel extends ChangeNotifier {
         _dataSource.loadLibraryFavorites(libraryId, _serverId,
             includeItemTypes: ['MusicAlbum']),
         _dataSource.loadPlaylists(_serverId),
+        _dataSource.loadLibraryItemsByType(libraryId, _serverId,
+            title: 'Artists',
+            includeItemTypes: ['MusicArtist'],
+            sortBy: 'SortName'),
+        _dataSource.loadLibraryItemsByType(libraryId, _serverId,
+            title: 'Albums',
+            includeItemTypes: ['MusicAlbum'],
+            sortBy: 'DateCreated',
+            sortOrder: 'Descending'),
       ]);
 
       _rows = results.where((r) => r.items.isNotEmpty).toList();

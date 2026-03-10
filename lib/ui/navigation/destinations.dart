@@ -18,6 +18,7 @@ class Destinations {
   static const folderView = '/folders';
   static const folderBrowse = '/folder/:folderId';
   static const collectionBrowse = '/collection/:collectionId';
+  static const libraryViewRoute = '/library-view/:libraryId';
   static const musicBrowse = '/music/:libraryId';
   static const genreBrowse = '/genre/:genreName';
 
@@ -65,6 +66,7 @@ class Destinations {
   static const jellyseerrPersonDetail = '/jellyseerr/person/:personId';
 
   static String library(String libraryId) => '/library/$libraryId';
+  static String libraryView(String libraryId) => '/library-view/$libraryId';
   static String libraryGenresOf(String libraryId) =>
       '/library/$libraryId/genres';
   static String libraryLettersOf(String libraryId) =>
@@ -75,8 +77,13 @@ class Destinations {
   static String itemListOf(String itemId) => '/item/$itemId/list';
   static String musicFavoritesOf(String parentId) =>
       '/music-favorites/$parentId';
-  static String genre(String genreName) =>
-      '/genre/${Uri.encodeComponent(genreName)}';
+  static String genre(String genreName, {required String genreId, String? parentId, String? includeType}) {
+    final base = '/genre/${Uri.encodeComponent(genreName)}';
+    final params = <String>['genreId=$genreId'];
+    if (parentId != null) params.add('parentId=$parentId');
+    if (includeType != null) params.add('includeType=$includeType');
+    return '$base?${params.join('&')}';
+  }
   static String folder(String folderId) => '/folder/$folderId';
   static String collection(String collectionId) =>
       '/collection/$collectionId';

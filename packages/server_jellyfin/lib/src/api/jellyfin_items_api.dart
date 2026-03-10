@@ -174,4 +174,22 @@ class JellyfinItemsApi implements ItemsApi {
       'Ids': itemIds.join(','),
     });
   }
+
+  @override
+  Future<Map<String, dynamic>> getGenres({
+    String? parentId,
+    String? sortBy,
+    String? sortOrder,
+    int? startIndex,
+    int? limit,
+  }) async {
+    final response = await _dio.get('/Genres', queryParameters: {
+      if (parentId != null) 'ParentId': parentId,
+      if (sortBy != null) 'SortBy': sortBy,
+      if (sortOrder != null) 'SortOrder': sortOrder,
+      if (startIndex != null) 'StartIndex': startIndex,
+      if (limit != null) 'Limit': limit,
+    });
+    return response.data as Map<String, dynamic>;
+  }
 }
