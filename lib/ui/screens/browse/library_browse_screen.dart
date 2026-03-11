@@ -12,6 +12,7 @@ import '../../../data/services/background_service.dart';
 import '../../../data/viewmodels/library_browse_view_model.dart';
 import '../../../preference/preference_constants.dart';
 import '../../../preference/user_preferences.dart';
+import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/media_card.dart';
 import '../../widgets/rating_display.dart';
@@ -19,6 +20,10 @@ import '../../widgets/rating_display.dart';
 const _navyBackground = Color(0xFF101528);
 const _jellyfinBlue = Color(0xFF00A4DC);
 const _horizontalPadding = 60.0;
+const _kCompactBreakpoint = 600.0;
+
+bool _isCompact(BuildContext context) =>
+    PlatformDetection.isMobile || MediaQuery.sizeOf(context).width < _kCompactBreakpoint;
 
 class LibraryBrowseScreen extends StatefulWidget {
   final String libraryId;
@@ -108,7 +113,8 @@ class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasBackdrop = _backdropUrl != null;
+    final isMobile = _isCompact(context);
+    final hasBackdrop = !isMobile && _backdropUrl != null;
     return Scaffold(
       backgroundColor: _navyBackground,
       body: Stack(
@@ -121,6 +127,7 @@ class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
                   key: ValueKey(_backdropUrl),
                   imageUrl: _backdropUrl!,
                   fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
                   fadeInDuration: const Duration(milliseconds: 300),
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 ),
@@ -190,10 +197,11 @@ class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
 
     final cardWidth = _cardWidth();
     const spacing = 12.0;
-    const gridPadding = _horizontalPadding;
     final watchedBehavior = _prefs.get(UserPreferences.watchedIndicatorBehavior);
 
     return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = _isCompact(context);
+      final gridPadding = isMobile ? 16.0 : _horizontalPadding;
       final crossAxisCount =
           ((constraints.maxWidth - gridPadding * 2 + spacing) /
                   (cardWidth + spacing))
@@ -211,7 +219,7 @@ class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
         controller: _scrollController,
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
                 gridPadding, 20, gridPadding, 16),
             sliver: SliverGrid(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -235,10 +243,10 @@ class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
                     playedPercentage: item.playedPercentage,
                     watchedBehavior: watchedBehavior,
                     itemType: item.type,
-                    onFocus: () => _onItemFocused(item),
-                    onHoverStart: () => _onItemFocused(item),
-                    onHoverEnd: () => _vm.setFocusedItem(null),
-                    onLongPress: () => _onItemFocused(item),
+                    onFocus: isMobile ? null : () => _onItemFocused(item),
+                    onHoverStart: isMobile ? null : () => _onItemFocused(item),
+                    onHoverEnd: isMobile ? null : () => _vm.setFocusedItem(null),
+                    onLongPress: isMobile ? null : () => _onItemFocused(item),
                     onTap: () => context.push(Destinations.item(item.id)),
                   );
                 },
@@ -327,9 +335,12 @@ class _LibraryHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = _isCompact(context);
+    final topPad = isMobile ? MediaQuery.of(context).padding.top + 8 : 12.0;
+    final hPad = isMobile ? 16.0 : _horizontalPadding;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          _horizontalPadding, 12, _horizontalPadding, 4),
+      padding: EdgeInsets.fromLTRB(hPad, topPad, hPad, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -357,16 +368,19 @@ class _LibraryHeader extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(height: 6),
-          _FocusedItemHud(
-            item: focusedItem,
-            ratings: focusedRatings,
-            enableAdditionalRatings: enableAdditionalRatings,
-            enabledRatings: enabledRatings,
-            blockedRatings: blockedRatings,
-          ),
+          if (!isMobile) ...[
+            const SizedBox(height: 6),
+            _FocusedItemHud(
+              item: focusedItem,
+              ratings: focusedRatings,
+              enableAdditionalRatings: enableAdditionalRatings,
+              enabledRatings: enabledRatings,
+              blockedRatings: blockedRatings,
+            ),
+          ],
           const SizedBox(height: 6),
           Row(
+            mainAxisAlignment: isMobile ? MainAxisAlignment.center : MainAxisAlignment.start,
             children: [
               _ToolbarButton(
                 icon: Icons.home,
@@ -377,12 +391,14 @@ class _LibraryHeader extends StatelessWidget {
                 icon: Icons.sort,
                 onTap: onSort,
               ),
-              const SizedBox(width: 4),
-              _ToolbarButton(
-                icon: Icons.settings,
-                onTap: onSettings,
-              ),
-              if (sortBy == LibrarySortBy.name) ...[
+              if (!isMobile) ...[
+                const SizedBox(width: 4),
+                _ToolbarButton(
+                  icon: Icons.settings,
+                  onTap: onSettings,
+                ),
+              ],
+              if (!isMobile && sortBy == LibrarySortBy.name) ...[
                 const SizedBox(width: 16),
                 Expanded(
                   child: _AlphaPickerBar(
@@ -416,22 +432,24 @@ class _FocusedItemHud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
-      child: item == null
-          ? const SizedBox(key: ValueKey('empty'), height: 48)
-          : Column(
-              key: ValueKey(item!.id),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  item!.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
+    return SizedBox(
+      height: 80,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: item == null
+            ? const SizedBox.shrink(key: ValueKey('empty'))
+            : Column(
+                key: ValueKey(item!.id),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    item!.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
                     color: Colors.white,
                   ),
                 ),
@@ -448,6 +466,7 @@ class _FocusedItemHud extends StatelessWidget {
                 ),
               ],
             ),
+      ),
     );
   }
 }
@@ -632,9 +651,10 @@ class _LibraryStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hPad = _isCompact(context) ? 16.0 : _horizontalPadding;
     return Padding(
-      padding: const EdgeInsets.symmetric(
-          horizontal: _horizontalPadding, vertical: 4),
+      padding: EdgeInsets.symmetric(
+          horizontal: hPad, vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

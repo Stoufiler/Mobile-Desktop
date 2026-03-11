@@ -345,7 +345,7 @@ class _TopToolbarState extends State<TopToolbar> {
         if (lib.collectionType == 'music') {
           context.push('/music/${lib.id}');
         } else {
-          context.push('/library-view/${lib.id}');
+          context.push('/library/${lib.id}');
         }
       },
     );

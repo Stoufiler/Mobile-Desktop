@@ -9,6 +9,7 @@ import 'package:server_core/server_core.dart';
 import '../../../data/models/aggregated_item.dart';
 import '../../../data/services/background_service.dart';
 import '../../../preference/user_preferences.dart';
+import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/media_card.dart';
 import '../../widgets/poster_size_settings_dialog.dart';
@@ -17,6 +18,10 @@ const _navyBackground = Color(0xFF101528);
 const _jellyfinBlue = Color(0xFF00A4DC);
 const _horizontalPadding = 60.0;
 const _pageSize = 100;
+const _kCompactBreakpoint = 600.0;
+
+bool _isCompact(BuildContext context) =>
+    PlatformDetection.isMobile || MediaQuery.sizeOf(context).width < _kCompactBreakpoint;
 
 class GenreBrowseScreen extends StatefulWidget {
   final String genreName;
@@ -191,7 +196,8 @@ class _GenreBrowseScreenState extends State<GenreBrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasBackdrop = _backdropUrl != null;
+    final isMobile = _isCompact(context);
+    final hasBackdrop = !isMobile && _backdropUrl != null;
     return Scaffold(
       backgroundColor: _navyBackground,
       body: Stack(
@@ -204,6 +210,7 @@ class _GenreBrowseScreenState extends State<GenreBrowseScreen> {
                   key: ValueKey(_backdropUrl),
                   imageUrl: _backdropUrl!,
                   fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
                   fadeInDuration: const Duration(milliseconds: 300),
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 ),
@@ -255,14 +262,16 @@ class _GenreBrowseScreenState extends State<GenreBrowseScreen> {
     final watchedBehavior = _prefs.get(UserPreferences.watchedIndicatorBehavior);
 
     return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = _isCompact(context);
+      final gridPadding = isMobile ? 16.0 : _horizontalPadding;
       const spacing = 12.0;
       final crossAxisCount =
-          ((constraints.maxWidth - _horizontalPadding * 2 + spacing) /
+          ((constraints.maxWidth - gridPadding * 2 + spacing) /
                   (cardWidth + spacing))
               .floor()
               .clamp(2, 20);
 
-      final cellWidth = (constraints.maxWidth - _horizontalPadding * 2 -
+      final cellWidth = (constraints.maxWidth - gridPadding * 2 -
               (crossAxisCount - 1) * spacing) /
           crossAxisCount;
       const titleHeight = 46.0;
@@ -272,8 +281,8 @@ class _GenreBrowseScreenState extends State<GenreBrowseScreen> {
         controller: _scrollController,
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(
-                _horizontalPadding, 20, _horizontalPadding, 16),
+            padding: EdgeInsets.fromLTRB(
+                gridPadding, 20, gridPadding, 16),
             sliver: SliverGrid(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: crossAxisCount,
@@ -301,8 +310,8 @@ class _GenreBrowseScreenState extends State<GenreBrowseScreen> {
                     playedPercentage: item.playedPercentage,
                     watchedBehavior: watchedBehavior,
                     itemType: item.type,
-                    onFocus: () => _onItemFocused(item),
-                    onHoverStart: () => _onItemFocused(item),
+                    onFocus: isMobile ? null : () => _onItemFocused(item),
+                    onHoverStart: isMobile ? null : () => _onItemFocused(item),
                     onTap: () => context.push(Destinations.item(item.id)),
                   );
                 },
@@ -345,9 +354,58 @@ class _GenreHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = _isCompact(context);
+    final topPad = isMobile ? MediaQuery.of(context).padding.top + 8 : 20.0;
+    final hPad = isMobile ? 16.0 : _horizontalPadding;
+
+    if (isMobile) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(hPad, topPad, hPad, 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white70, size: 22),
+              onPressed: onBack,
+              tooltip: 'Back',
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                genreName,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w300,
+                  color: Colors.white,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (totalCount > 0) ...[
+              const SizedBox(width: 8),
+              Text(
+                '$totalCount Items',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withAlpha(102),
+                ),
+              ),
+            ],
+            if (libraries.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              _LibraryDropdown(
+                libraries: libraries,
+                selectedId: selectedLibraryId,
+                onChanged: onLibraryChanged,
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          _horizontalPadding, 20, _horizontalPadding, 8),
+      padding: EdgeInsets.fromLTRB(hPad, topPad, hPad, 8),
       child: Row(
         children: [
           IconButton(

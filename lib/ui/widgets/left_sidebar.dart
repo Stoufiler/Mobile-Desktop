@@ -328,7 +328,7 @@ class _LeftSidebarState extends State<LeftSidebar> {
                                       if (lib.collectionType == 'music') {
                                         context.push('/music/${lib.id}');
                                       } else {
-                                        context.push('/library-view/${lib.id}');
+                                        context.push('/library/${lib.id}');
                                       }
                                     },
                                   ))

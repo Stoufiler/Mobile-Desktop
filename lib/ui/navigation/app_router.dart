@@ -17,7 +17,6 @@ import '../screens/browse/library_browse_screen.dart';
 import '../screens/browse/library_genres_screen.dart';
 import '../screens/browse/library_letters_screen.dart';
 import '../screens/browse/library_suggestions_screen.dart';
-import '../screens/browse/library_view_screen.dart';
 import '../screens/browse/music_browse_screen.dart';
 import '../screens/detail/item_detail_screen.dart';
 import '../screens/detail/item_list_screen.dart';
@@ -112,13 +111,6 @@ final appRouter = GoRouter(
     ),
 
     // Browsing
-    GoRoute(
-      path: Destinations.libraryViewRoute,
-      builder: (context, state) {
-        final libraryId = state.pathParameters['libraryId']!;
-        return LibraryViewScreen(libraryId: libraryId);
-      },
-    ),
     GoRoute(
       path: Destinations.libraryBrowse,
       builder: (context, state) {

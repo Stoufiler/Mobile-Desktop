@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 class GenreCardData {
   final String id;
   final String name;
-  final int itemCount;
+  int itemCount;
   String? backdropUrl;
 
   GenreCardData({
@@ -18,13 +18,13 @@ class GenreCardData {
 class GenreGridCard extends StatefulWidget {
   final GenreCardData genre;
   final VoidCallback onTap;
-  final ValueChanged<bool> onHover;
+  final ValueChanged<bool>? onHover;
 
   const GenreGridCard({
     super.key,
     required this.genre,
     required this.onTap,
-    required this.onHover,
+    this.onHover,
   });
 
   @override
@@ -39,11 +39,11 @@ class _GenreGridCardState extends State<GenreGridCard> {
     return MouseRegion(
       onEnter: (_) {
         setState(() => _hovered = true);
-        widget.onHover(true);
+        widget.onHover?.call(true);
       },
       onExit: (_) {
         setState(() => _hovered = false);
-        widget.onHover(false);
+        widget.onHover?.call(false);
       },
       child: GestureDetector(
         onTap: widget.onTap,

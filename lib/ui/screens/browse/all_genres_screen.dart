@@ -8,6 +8,7 @@ import 'package:server_core/server_core.dart';
 
 import '../../../data/services/background_service.dart';
 import '../../../preference/user_preferences.dart';
+import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/genre_grid_card.dart';
 import '../../widgets/poster_size_settings_dialog.dart';
@@ -15,6 +16,10 @@ import '../../widgets/poster_size_settings_dialog.dart';
 const _navyBackground = Color(0xFF101528);
 const _jellyfinBlue = Color(0xFF00A4DC);
 const _horizontalPadding = 60.0;
+const _kCompactBreakpoint = 600.0;
+
+bool _isCompact(BuildContext context) =>
+    PlatformDetection.isMobile || MediaQuery.sizeOf(context).width < _kCompactBreakpoint;
 
 class AllGenresScreen extends StatefulWidget {
   const AllGenresScreen({super.key});
@@ -77,14 +82,18 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
     _isLoading = false;
     if (!_disposed && mounted) setState(() {});
 
-    _loadBackdrops();
+    _filterAndLoadBackdrops();
   }
 
-  Future<void> _loadBackdrops() async {
-    await Future.wait(_genres.map((genre) => _loadGenreBackdrop(genre)));
+  Future<void> _filterAndLoadBackdrops() async {
+    await Future.wait(_genres.map(_loadGenreItems));
+
+    final before = _genres.length;
+    _genres.removeWhere((g) => g.itemCount == 0);
+    if (!_disposed && mounted && _genres.length != before) setState(() {});
   }
 
-  Future<void> _loadGenreBackdrop(GenreCardData genre) async {
+  Future<void> _loadGenreItems(GenreCardData genre) async {
     if (_disposed) return;
     try {
       final response = await _client.itemsApi.getItems(
@@ -96,6 +105,9 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
         limit: 10,
         fields: 'BackdropImageTags',
       );
+      final totalCount = response['TotalRecordCount'] as int? ?? 0;
+      genre.itemCount = totalCount;
+
       final items = (response['Items'] as List?) ?? [];
       for (final raw in items) {
         final item = raw as Map<String, dynamic>;
@@ -125,7 +137,8 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasBackdrop = _backdropUrl != null;
+    final isMobile = _isCompact(context);
+    final hasBackdrop = !isMobile && _backdropUrl != null;
     return Scaffold(
       backgroundColor: _navyBackground,
       body: Stack(
@@ -138,6 +151,7 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
                   key: ValueKey(_backdropUrl),
                   imageUrl: _backdropUrl!,
                   fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
                   fadeInDuration: const Duration(milliseconds: 300),
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 ),
@@ -151,9 +165,14 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
           Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    _horizontalPadding, 20, _horizontalPadding, 8),
+                padding: EdgeInsets.fromLTRB(
+                  isMobile ? 16.0 : _horizontalPadding,
+                  isMobile ? MediaQuery.of(context).padding.top + 8 : 20.0,
+                  isMobile ? 16.0 : _horizontalPadding,
+                  8,
+                ),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.home,
@@ -161,13 +180,15 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
                       onPressed: () => context.go(Destinations.home),
                       tooltip: 'Home',
                     ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.settings,
-                          color: Colors.white70, size: 22),
-                      onPressed: () => _showSettingsDialog(),
-                      tooltip: 'Display Settings',
-                    ),
+                    if (!isMobile) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.settings,
+                            color: Colors.white70, size: 22),
+                        onPressed: () => _showSettingsDialog(),
+                        tooltip: 'Display Settings',
+                      ),
+                    ],
                     const SizedBox(width: 12),
                     const Text(
                       'All Genres',
@@ -202,19 +223,25 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
     }
 
     return LayoutBuilder(builder: (context, constraints) {
-      final posterSize = _prefs.get(UserPreferences.posterSize);
-      final cardHeight = posterSize.landscapeHeight.toDouble();
-      final cardWidth = cardHeight * (16 / 9);
+      final isMobile = _isCompact(context);
+      final hPad = isMobile ? 16.0 : _horizontalPadding;
       const spacing = 16.0;
-      final crossAxisCount =
-          ((constraints.maxWidth - _horizontalPadding * 2 + spacing) /
-                  (cardWidth + spacing))
-              .floor()
-              .clamp(2, 8);
+      int crossAxisCount;
+      if (isMobile) {
+        crossAxisCount = 2;
+      } else {
+        final posterSize = _prefs.get(UserPreferences.posterSize);
+        final cardHeight = posterSize.landscapeHeight.toDouble();
+        final cardWidth = cardHeight * (16 / 9);
+        crossAxisCount =
+            ((constraints.maxWidth - hPad * 2 + spacing) /
+                    (cardWidth + spacing))
+                .floor()
+                .clamp(2, 8);
+      }
 
       return GridView.builder(
-        padding: const EdgeInsets.fromLTRB(
-            _horizontalPadding, 20, _horizontalPadding, 32),
+        padding: EdgeInsets.fromLTRB(hPad, 20, hPad, 32),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
           mainAxisSpacing: spacing,
@@ -227,7 +254,7 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
           return GenreGridCard(
             genre: genre,
             onTap: () => context.push(Destinations.genre(genre.name, genreId: genre.id)),
-            onHover: (hovering) {
+            onHover: isMobile ? null : (hovering) {
               if (hovering && genre.backdropUrl != null) {
                 _backgroundService.setBackgroundUrl(genre.backdropUrl!);
               }
