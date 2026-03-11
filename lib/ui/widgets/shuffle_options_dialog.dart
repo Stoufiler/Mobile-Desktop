@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
+import 'package:go_router/go_router.dart';
 import 'package:server_core/server_core.dart';
 
 import '../../data/models/aggregated_library.dart';
 import '../../data/repositories/user_views_repository.dart';
 import '../../preference/user_preferences.dart';
+import '../navigation/destinations.dart';
 import 'focusable_dialog_row.dart';
 
 const _kAccent = Color(0xFF00A4DC);
 
 class ShuffleOptionsDialog extends StatefulWidget {
   final String shuffleContentType;
-  final ValueChanged<_ShuffleResult> onShuffle;
+  final ValueChanged<ShuffleResult> onShuffle;
 
   const ShuffleOptionsDialog({
     super.key,
@@ -26,13 +28,13 @@ class ShuffleOptionsDialog extends StatefulWidget {
 
 enum _ShuffleMode { main, libraries, genres }
 
-class _ShuffleResult {
+class ShuffleResult {
   final String? libraryId;
   final String? genreName;
   final String contentType;
   final String? collectionType;
 
-  const _ShuffleResult({
+  const ShuffleResult({
     this.libraryId,
     this.genreName,
     required this.contentType,
@@ -177,7 +179,7 @@ class _ShuffleOptionsDialogState extends State<ShuffleOptionsDialog> {
                     autofocus: i == 0,
                     onTap: () {
                       Navigator.pop(context);
-                      widget.onShuffle(_ShuffleResult(
+                      widget.onShuffle(ShuffleResult(
                         libraryId: lib.id,
                         contentType: widget.shuffleContentType,
                         collectionType: lib.collectionType,
@@ -204,7 +206,7 @@ class _ShuffleOptionsDialogState extends State<ShuffleOptionsDialog> {
                     autofocus: i == 0,
                     onTap: () {
                       Navigator.pop(context);
-                      widget.onShuffle(_ShuffleResult(
+                      widget.onShuffle(ShuffleResult(
                         genreName: genre,
                         contentType: widget.shuffleContentType,
                       ));
@@ -288,9 +290,42 @@ void showShuffleDialog(BuildContext context) {
     context: context,
     builder: (_) => ShuffleOptionsDialog(
       shuffleContentType: contentType,
-      onShuffle: (result) {
-        // TODO: Wire to ShuffleManager when implemented
-      },
+      onShuffle: (result) => fetchRandomAndNavigate(
+        context,
+        contentType: result.contentType,
+        parentId: result.libraryId,
+        genreName: result.genreName,
+      ),
     ),
   );
+}
+
+Future<void> fetchRandomAndNavigate(
+  BuildContext context, {
+  required String contentType,
+  String? parentId,
+  String? genreName,
+}) async {
+  final client = GetIt.instance<MediaServerClient>();
+  final types = switch (contentType) {
+    'movies' => ['Movie'],
+    'shows' => ['Series'],
+    _ => ['Movie', 'Series'],
+  };
+  try {
+    final response = await client.itemsApi.getItems(
+      includeItemTypes: types,
+      sortBy: 'Random',
+      limit: 1,
+      recursive: true,
+      parentId: parentId,
+      genres: genreName != null ? [genreName] : null,
+      enableTotalRecordCount: false,
+    );
+    final items = (response['Items'] as List?) ?? [];
+    if (items.isNotEmpty && context.mounted) {
+      final id = (items[0] as Map<String, dynamic>)['Id'] as String;
+      context.push(Destinations.item(id));
+    }
+  } catch (_) {}
 }

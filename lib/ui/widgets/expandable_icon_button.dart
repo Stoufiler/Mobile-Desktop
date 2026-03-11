@@ -1,15 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../util/platform_detection.dart';
 
 const _kExpandDuration = Duration(milliseconds: 150);
+const _kHoverDelay = Duration(milliseconds: 150);
 const _kSpacing = 10.0;
 
 class ExpandableIconButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
+  final VoidCallback? onLongPress;
   final FocusNode? focusNode;
   final bool isActive;
   final Color activeColor;
@@ -19,6 +23,7 @@ class ExpandableIconButton extends StatefulWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.onLongPress,
     this.focusNode,
     this.isActive = false,
     this.activeColor = const Color(0xFF00A4DC),
@@ -32,6 +37,7 @@ class _ExpandableIconButtonState extends State<ExpandableIconButton> {
   late final FocusNode _focusNode;
   bool _isFocused = false;
   bool _isHovered = false;
+  Timer? _hoverTimer;
 
   bool get _expanded => _isFocused || _isHovered;
 
@@ -44,6 +50,7 @@ class _ExpandableIconButtonState extends State<ExpandableIconButton> {
 
   @override
   void dispose() {
+    _hoverTimer?.cancel();
     _focusNode.removeListener(_onFocusChange);
     if (widget.focusNode == null) _focusNode.dispose();
     super.dispose();
@@ -82,13 +89,22 @@ class _ExpandableIconButtonState extends State<ExpandableIconButton> {
         : Colors.white.withValues(alpha: 0.6);
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        _hoverTimer?.cancel();
+        _hoverTimer = Timer(_kHoverDelay, () {
+          if (mounted) setState(() => _isHovered = true);
+        });
+      },
+      onExit: (_) {
+        _hoverTimer?.cancel();
+        setState(() => _isHovered = false);
+      },
       child: Focus(
         focusNode: _focusNode,
         onKeyEvent: _onKeyEvent,
         child: GestureDetector(
           onTap: widget.onPressed,
+          onLongPress: widget.onLongPress,
           child: AnimatedContainer(
             duration: _kExpandDuration,
             curve: Curves.easeOut,

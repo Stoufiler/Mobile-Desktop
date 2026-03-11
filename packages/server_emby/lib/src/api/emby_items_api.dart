@@ -25,8 +25,10 @@ class EmbyItemsApi implements ItemsApi {
     List<String>? seriesStatus,
     String? nameStartsWith,
     List<String>? genreIds,
+    List<String>? genres,
     bool? isFavorite,
     bool? collapseBoxSetItems,
+    bool? enableTotalRecordCount,
   }) async {
     final userId = _getUserId();
     final response = await _dio.get(
@@ -50,8 +52,10 @@ class EmbyItemsApi implements ItemsApi {
         if (seriesStatus != null) 'SeriesStatus': seriesStatus.join(','),
         if (nameStartsWith != null) 'NameStartsWith': nameStartsWith,
         if (genreIds != null) 'GenreIds': genreIds.join(','),
+        if (genres != null) 'Genres': genres.join(','),
         if (isFavorite != null) 'IsFavorite': isFavorite,
       if (collapseBoxSetItems != null) 'CollapseBoxSetItems': collapseBoxSetItems,
+      if (enableTotalRecordCount != null) 'EnableTotalRecordCount': enableTotalRecordCount,
       },
     );
     return response.data as Map<String, dynamic>;

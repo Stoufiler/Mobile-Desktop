@@ -16,8 +16,10 @@ abstract class ItemsApi {
     List<String>? seriesStatus,
     String? nameStartsWith,
     List<String>? genreIds,
+    List<String>? genres,
     bool? isFavorite,
     bool? collapseBoxSetItems,
+    bool? enableTotalRecordCount,
   });
 
   Future<Map<String, dynamic>> getItem(String itemId);

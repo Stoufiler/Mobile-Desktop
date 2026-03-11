@@ -27,7 +27,8 @@ const _kAccent = Color(0xFF00A4DC);
 const _kAvatarSizeDesktop = 44.0;
 const _kAvatarSizeMobile = 36.0;
 const _kPillRadius = 36.0;
-const _kButtonSpacing = 4.0;
+const _kButtonSpacing = 12.0;
+const _kButtonSpacingMobile = 8.0;
 
 class TopToolbar extends StatefulWidget {
   final String? activeRoute;
@@ -263,7 +264,8 @@ class _TopToolbarState extends State<TopToolbar> {
                   child: ExpandableIconButton(
                     icon: Icons.shuffle_rounded,
                     label: 'Shuffle',
-                    onPressed: _onShuffle,
+                    onPressed: () => _shuffleRandom(context),
+                    onLongPress: () => showShuffleDialog(context),
                   ),
                 ),
               ],
@@ -351,8 +353,9 @@ class _TopToolbarState extends State<TopToolbar> {
     );
   }
 
-  void _onShuffle() {
-    showShuffleDialog(context);
+  Future<void> _shuffleRandom(BuildContext context) async {
+    final contentType = _prefs.get(UserPreferences.shuffleContentType);
+    await fetchRandomAndNavigate(context, contentType: contentType);
   }
 
   Widget _buildEnd() {
@@ -372,7 +375,9 @@ class _TopToolbarState extends State<TopToolbar> {
     );
   }
 
-  Widget _gap() => const SizedBox(width: _kButtonSpacing);
+  Widget _gap() => SizedBox(
+    width: PlatformDetection.useMobileUi ? _kButtonSpacingMobile : _kButtonSpacing,
+  );
 
   Widget _orderButton({required double order, required Widget child}) {
     return FocusTraversalOrder(
