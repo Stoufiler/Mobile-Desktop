@@ -1192,7 +1192,7 @@ class _CastRow extends StatelessWidget {
     final avatarRadius = isMobile ? 35.0 : 45.0;
 
     return SizedBox(
-      height: isMobile ? 130 : 160,
+      height: isMobile ? 140 : 160,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: people.length,

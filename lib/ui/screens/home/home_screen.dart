@@ -285,7 +285,7 @@ class _ContentRows extends StatelessWidget {
             final height = ar > 1
                 ? posterSize.landscapeHeight.toDouble()
                 : posterSize.portraitHeight.toDouble();
-            final cardHeight = height + 40;
+            final cardHeight = height + 46;
             if (cardHeight > maxCardHeight) maxCardHeight = cardHeight;
             final width = height * ar;
             final imageUrl = _resolveImageUrl(

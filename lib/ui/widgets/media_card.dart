@@ -130,16 +130,19 @@ class _MediaCardState extends State<MediaCard> {
                     ),
                   ],
                   if (widget.subtitle != null)
-                    Text(
-                      widget.subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withAlpha(153),
-                          ),
+                    SizedBox(
+                      height: 16,
+                      child: Text(
+                        widget.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withAlpha(153),
+                            ),
+                      ),
                     ),
                 ],
               ),
