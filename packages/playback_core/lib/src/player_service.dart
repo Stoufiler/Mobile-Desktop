@@ -1,7 +1,24 @@
-/// Hooks into playback lifecycle events (e.g., server reporting, lyrics, media session).
+import 'stream_resolution_result.dart';
+
 abstract class PlayerService {
-  Future<void> onPlaybackStart(dynamic mediaItem);
-  Future<void> onPlaybackProgress(Duration position);
-  Future<void> onPlaybackStop(Duration position);
+  Future<void> onPlaybackStart(
+    dynamic mediaItem,
+    StreamResolutionResult resolution, {
+    int? positionTicks,
+  });
+
+  Future<void> onPlaybackProgress(
+    dynamic mediaItem,
+    StreamResolutionResult resolution,
+    Duration position, {
+    bool isPaused = false,
+  });
+
+  Future<void> onPlaybackStop(
+    dynamic mediaItem,
+    StreamResolutionResult resolution,
+    Duration position,
+  );
+
   void dispose();
 }

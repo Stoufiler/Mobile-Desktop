@@ -1,3 +1,12 @@
+import 'stream_resolution_result.dart';
+
 abstract class MediaStreamResolver {
-  Future<String> resolve(dynamic mediaItem);
+  Future<StreamResolutionResult> resolve(
+    dynamic mediaItem, {
+    Map<String, dynamic>? deviceProfile,
+    int? maxStreamingBitrate,
+    int? audioStreamIndex,
+    int? subtitleStreamIndex,
+    int? startTimeTicks,
+  });
 }

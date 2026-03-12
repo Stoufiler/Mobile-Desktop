@@ -25,11 +25,11 @@ class JellyfinPlaybackApi implements PlaybackApi {
   @override
   Future<Map<String, dynamic>> getPlaybackInfo(
     String itemId, {
-    Map<String, dynamic>? deviceProfile,
+    Map<String, dynamic>? requestBody,
   }) async {
     final response = await _dio.post(
       '/Items/$itemId/PlaybackInfo',
-      data: deviceProfile != null ? {'DeviceProfile': deviceProfile} : null,
+      data: requestBody,
     );
     return response.data as Map<String, dynamic>;
   }

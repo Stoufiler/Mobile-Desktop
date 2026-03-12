@@ -10,3 +10,4 @@ export 'src/player_service.dart';
 export 'src/queue_service.dart';
 export 'src/player_state.dart';
 export 'src/media_stream_resolver.dart';
+export 'src/stream_resolution_result.dart';

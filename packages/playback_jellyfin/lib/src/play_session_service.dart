@@ -7,28 +7,58 @@ class PlaySessionService implements PlayerService {
   PlaySessionService(this._client);
 
   @override
-  Future<void> onPlaybackStart(dynamic mediaItem) async {
-    await _client.playbackApi.reportPlaybackStart({
-      'ItemId': mediaItem['Id'],
-      'CanSeek': true,
-      'IsPaused': false,
-    });
+  Future<void> onPlaybackStart(
+    dynamic mediaItem,
+    StreamResolutionResult resolution, {
+    int? positionTicks,
+  }) async {
+    final report = PlaybackStartReport(
+      itemId: mediaItem['Id'] as String,
+      mediaSourceId: resolution.mediaSourceId,
+      playSessionId: resolution.playSessionId,
+      playMethod: _toPlayMethod(resolution.playMethod),
+      positionTicks: positionTicks,
+    );
+    await _client.playbackApi.reportPlaybackStart(report.toJson());
   }
 
   @override
-  Future<void> onPlaybackProgress(Duration position) async {
-    await _client.playbackApi.reportPlaybackProgress({
-      'PositionTicks': position.inMicroseconds * 10,
-      'IsPaused': false,
-    });
+  Future<void> onPlaybackProgress(
+    dynamic mediaItem,
+    StreamResolutionResult resolution,
+    Duration position, {
+    bool isPaused = false,
+  }) async {
+    final report = PlaybackProgressReport(
+      itemId: mediaItem['Id'] as String,
+      mediaSourceId: resolution.mediaSourceId,
+      playSessionId: resolution.playSessionId,
+      positionTicks: position.inMicroseconds * 10,
+      isPaused: isPaused,
+    );
+    await _client.playbackApi.reportPlaybackProgress(report.toJson());
   }
 
   @override
-  Future<void> onPlaybackStop(Duration position) async {
-    await _client.playbackApi.reportPlaybackStopped({
-      'PositionTicks': position.inMicroseconds * 10,
-    });
+  Future<void> onPlaybackStop(
+    dynamic mediaItem,
+    StreamResolutionResult resolution,
+    Duration position,
+  ) async {
+    final report = PlaybackStopReport(
+      itemId: mediaItem['Id'] as String,
+      mediaSourceId: resolution.mediaSourceId,
+      playSessionId: resolution.playSessionId,
+      positionTicks: position.inMicroseconds * 10,
+    );
+    await _client.playbackApi.reportPlaybackStopped(report.toJson());
   }
+
+  static PlayMethod _toPlayMethod(StreamPlayMethod method) => switch (method) {
+    StreamPlayMethod.directPlay => PlayMethod.directPlay,
+    StreamPlayMethod.directStream => PlayMethod.directStream,
+    StreamPlayMethod.transcode => PlayMethod.transcode,
+  };
 
   @override
   void dispose() {}
