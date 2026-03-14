@@ -17,6 +17,7 @@ class SearchRepository {
       includeItemTypes: includeItemTypes,
       limit: limit ?? 24,
       recursive: true,
+      fields: 'PrimaryImageAspectRatio,BasicSyncInfo,Overview,Genres,CommunityRating,OfficialRating,RunTimeTicks,ProductionYear,ImageTags,BackdropImageTags,ParentBackdropItemId,ParentBackdropImageTags',
     );
 
     final items = response['Items'] as List? ?? [];
