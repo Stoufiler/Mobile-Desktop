@@ -16,6 +16,7 @@ import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../../data/models/media_bar_state.dart';
 import '../../../data/viewmodels/media_bar_view_model.dart';
+import '../../widgets/grid_button_card.dart';
 import '../../widgets/info_area.dart';
 import '../../widgets/library_row.dart';
 import '../../widgets/media_bar.dart';
@@ -367,6 +368,9 @@ class _ContentRowsState extends State<_ContentRows> {
               if (row.isLoading) {
                 return LibraryRow(title: row.title, children: const []);
               }
+              if (row.rowType == HomeRowType.liveTv) {
+                return _buildLiveTvRow(row, focusColor);
+              }
               double maxCardHeight = 0;
               final useLandscape = row.rowType == HomeRowType.resume ||
                   row.rowType == HomeRowType.nextUp;
@@ -454,6 +458,39 @@ class _ContentRowsState extends State<_ContentRows> {
               ),
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildLiveTvRow(HomeRow row, Color focusColor) {
+    return LibraryRow(
+      title: row.title,
+      rowHeight: 140,
+      children: [
+        GridButtonCard(
+          icon: Icons.tv_rounded,
+          label: 'Guide',
+          focusColor: focusColor,
+          onTap: () => context.push(Destinations.liveTvGuide),
+        ),
+        GridButtonCard(
+          icon: Icons.fiber_manual_record_rounded,
+          label: 'Recordings',
+          focusColor: focusColor,
+          onTap: () => context.push(Destinations.liveTvRecordings),
+        ),
+        GridButtonCard(
+          icon: Icons.schedule_rounded,
+          label: 'Schedule',
+          focusColor: focusColor,
+          onTap: () => context.push(Destinations.liveTvSchedule),
+        ),
+        GridButtonCard(
+          icon: Icons.video_library_rounded,
+          label: 'Series',
+          focusColor: focusColor,
+          onTap: () => context.push(Destinations.liveTvSeriesRecordings),
+        ),
       ],
     );
   }

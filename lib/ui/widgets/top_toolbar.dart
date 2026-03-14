@@ -376,6 +376,8 @@ class _TopToolbarState extends State<TopToolbar> {
       onLibraryTap: (lib) {
         if (lib.collectionType == 'music') {
           context.push('/music/${lib.id}');
+        } else if (lib.collectionType == 'livetv') {
+          context.push(Destinations.liveTvGuide);
         } else {
           context.push('/library/${lib.id}');
         }

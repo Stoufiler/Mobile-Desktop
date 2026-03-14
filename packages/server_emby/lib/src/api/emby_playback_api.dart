@@ -28,9 +28,13 @@ class EmbyPlaybackApi implements PlaybackApi {
     Map<String, dynamic>? requestBody,
     String? userId,
   }) async {
+    final body = <String, dynamic>{
+      if (userId != null) 'UserId': userId,
+      ...?requestBody,
+    };
     final response = await _dio.post(
       '/Items/$itemId/PlaybackInfo',
-      data: requestBody,
+      data: body,
       queryParameters: {
         if (userId != null) 'userId': userId,
       },

@@ -8,6 +8,7 @@ enum HomeRowType {
   libraryTiles,
   playlists,
   liveTv,
+  liveTvOnNow,
   activeRecordings,
   mediaBar,
 }

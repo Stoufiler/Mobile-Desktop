@@ -67,7 +67,10 @@ class _LiveTvPlayerScreenState extends State<LiveTvPlayerScreen> {
     _hideTimer?.cancel();
     _programRefreshTimer?.cancel();
     _overlayFocus.dispose();
-    if (!_isStopping) _manager.stop();
+    if (!_isStopping) {
+      _backend.stop();
+      _manager.stop();
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations([]);
     super.dispose();
@@ -82,7 +85,17 @@ class _LiveTvPlayerScreenState extends State<LiveTvPlayerScreen> {
       serverId: _client.baseUrl,
       rawData: channel.rawData,
     );
-    await _manager.playItems([item]);
+    try {
+      await _manager.playItems([item]);
+    } catch (e) {
+      debugPrint('[LiveTV] Playback failed for channel ${channel.name}: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to play ${channel.name}')),
+        );
+      }
+      return;
+    }
     _fetchCurrentProgram();
   }
 
@@ -123,6 +136,7 @@ class _LiveTvPlayerScreenState extends State<LiveTvPlayerScreen> {
         channelIds: [channelId],
         fields: 'Overview',
         enableTotalRecordCount: false,
+        userId: _client.userId,
       );
       final items = (response['Items'] as List?) ?? [];
       if (items.isEmpty || !mounted) return;
@@ -185,6 +199,7 @@ class _LiveTvPlayerScreenState extends State<LiveTvPlayerScreen> {
   Future<void> _exitPlayback() async {
     if (_isStopping) return;
     _isStopping = true;
+    _backend.stop();
     await _manager.stop();
     if (mounted) Navigator.of(context).pop();
   }

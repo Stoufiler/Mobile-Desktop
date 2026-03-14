@@ -86,7 +86,7 @@ class HomeViewModel extends ChangeNotifier {
       }
     }
 
-    _rows = loaded.where((r) => r.items.isNotEmpty).toList();
+    _rows = loaded.where((r) => r.items.isNotEmpty || r.rowType == HomeRowType.liveTv).toList();
     _isLoading = false;
     notifyListeners();
   }
@@ -128,13 +128,19 @@ class HomeViewModel extends ChangeNotifier {
       case HomeSectionType.libraryButtons:
         return [await _dataSource.loadLibraryTiles(_serverId)];
       case HomeSectionType.liveTv:
-        return [
+        final rows = <HomeRow>[
           const HomeRow(
             id: 'liveTv',
             title: 'Live TV',
             rowType: HomeRowType.liveTv,
+            items: [],
           ),
         ];
+        try {
+          final onNow = await _dataSource.loadOnNow(_serverId);
+          if (onNow.items.isNotEmpty) rows.add(onNow);
+        } catch (_) {}
+        return rows;
       case HomeSectionType.activeRecordings:
         return [
           const HomeRow(

@@ -12,6 +12,7 @@ class PlaybackInfoRequest {
   final bool enableTranscoding;
   final bool allowVideoStreamCopy;
   final bool allowAudioStreamCopy;
+  final bool autoOpenLiveStream;
 
   const PlaybackInfoRequest({
     required this.itemId,
@@ -25,6 +26,7 @@ class PlaybackInfoRequest {
     this.enableTranscoding = true,
     this.allowVideoStreamCopy = true,
     this.allowAudioStreamCopy = true,
+    this.autoOpenLiveStream = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -40,6 +42,7 @@ class PlaybackInfoRequest {
         'EnableTranscoding': enableTranscoding,
         'AllowVideoStreamCopy': allowVideoStreamCopy,
         'AllowAudioStreamCopy': allowAudioStreamCopy,
+        'AutoOpenLiveStream': autoOpenLiveStream,
       };
 }
 

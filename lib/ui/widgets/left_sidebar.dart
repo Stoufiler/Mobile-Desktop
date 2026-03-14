@@ -359,6 +359,8 @@ class _LeftSidebarState extends State<LeftSidebar> {
                                       _onNavigate();
                                       if (lib.collectionType == 'music') {
                                         context.push('/music/${lib.id}');
+                                      } else if (lib.collectionType == 'livetv') {
+                                        context.push(Destinations.liveTvGuide);
                                       } else {
                                         context.push('/library/${lib.id}');
                                       }

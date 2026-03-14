@@ -6,6 +6,7 @@ abstract class LiveTvApi {
     String? sortOrder,
     String? fields,
     bool? enableTotalRecordCount,
+    String? userId,
   });
 
   Future<Map<String, dynamic>> getGuide({
@@ -14,6 +15,7 @@ abstract class LiveTvApi {
     List<String>? channelIds,
     String? fields,
     bool? enableTotalRecordCount,
+    String? userId,
   });
 
   Future<Map<String, dynamic>> getRecommendedPrograms({int? limit});

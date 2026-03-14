@@ -19,6 +19,17 @@ class RowDataSource {
 
   ImageApi get imageApi => _client.imageApi;
 
+  Future<HomeRow> loadOnNow(String serverId) async {
+    final response = await _client.liveTvApi.getRecommendedPrograms(limit: _defaultLimit);
+    return _buildRow(
+      id: 'liveTvOnNow',
+      title: 'On Now',
+      response: response,
+      serverId: serverId,
+      rowType: HomeRowType.liveTvOnNow,
+    );
+  }
+
   Future<HomeRow> loadResume(String serverId) async {
     final response = await _client.itemsApi.getResumeItems(
       includeItemTypes: ['Movie', 'Episode'],
@@ -269,6 +280,7 @@ class RowDataSource {
       case HomeRowType.latestMedia:
       case HomeRowType.libraryTiles:
       case HomeRowType.liveTv:
+      case HomeRowType.liveTvOnNow:
       case HomeRowType.activeRecordings:
       case HomeRowType.mediaBar:
         return row.items;

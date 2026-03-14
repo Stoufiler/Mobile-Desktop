@@ -14,6 +14,7 @@ class EmbyLiveTvApi implements LiveTvApi {
     String? sortOrder,
     String? fields,
     bool? enableTotalRecordCount,
+    String? userId,
   }) async {
     final response = await _dio.get('/LiveTv/Channels', queryParameters: {
       if (startIndex != null) 'StartIndex': startIndex,
@@ -22,6 +23,7 @@ class EmbyLiveTvApi implements LiveTvApi {
       if (sortOrder != null) 'SortOrder': sortOrder,
       if (fields != null) 'Fields': fields,
       if (enableTotalRecordCount != null) 'EnableTotalRecordCount': enableTotalRecordCount,
+      if (userId != null) 'UserId': userId,
     });
     return response.data as Map<String, dynamic>;
   }
@@ -33,6 +35,7 @@ class EmbyLiveTvApi implements LiveTvApi {
     List<String>? channelIds,
     String? fields,
     bool? enableTotalRecordCount,
+    String? userId,
   }) async {
     final response = await _dio.get('/LiveTv/Programs', queryParameters: {
       if (startDate != null) 'MinStartDate': startDate.toIso8601String(),
@@ -40,6 +43,7 @@ class EmbyLiveTvApi implements LiveTvApi {
       if (channelIds != null && channelIds.isNotEmpty) 'ChannelIds': channelIds.join(','),
       if (fields != null) 'Fields': fields,
       if (enableTotalRecordCount != null) 'EnableTotalRecordCount': enableTotalRecordCount,
+      if (userId != null) 'UserId': userId,
     });
     return response.data as Map<String, dynamic>;
   }

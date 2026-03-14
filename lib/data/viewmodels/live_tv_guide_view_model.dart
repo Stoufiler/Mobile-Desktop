@@ -196,6 +196,7 @@ class LiveTvGuideViewModel extends ChangeNotifier {
       sortOrder: 'Ascending',
       fields: 'ImageTags',
       enableTotalRecordCount: false,
+      userId: _client.userId,
     );
     final items = (response['Items'] as List?) ?? [];
     _channels = items.cast<Map<String, dynamic>>().map((raw) {
@@ -222,6 +223,7 @@ class LiveTvGuideViewModel extends ChangeNotifier {
       channelIds: channelIds,
       fields: _fields,
       enableTotalRecordCount: false,
+      userId: _client.userId,
     );
 
     final items = (response['Items'] as List?) ?? [];

@@ -40,15 +40,19 @@ class _LiveTvGuideScreenState extends State<LiveTvGuideScreen> {
   bool _syncingScroll = false;
   void _syncVerticalScroll() {
     if (_syncingScroll) return;
+    if (!_channelScrollController.hasClients || !_programScrollController.hasClients) return;
     _syncingScroll = true;
-    final source = _channelScrollController.position.isScrollingNotifier.value
-        ? _channelScrollController
-        : _programScrollController;
-    final target = source == _channelScrollController
-        ? _programScrollController
-        : _channelScrollController;
-    if (target.hasClients) {
-      target.jumpTo(source.offset);
+    try {
+      final source = _channelScrollController.position.isScrollingNotifier.value
+          ? _channelScrollController
+          : _programScrollController;
+      final target = source == _channelScrollController
+          ? _programScrollController
+          : _channelScrollController;
+      if (target.hasClients) {
+        target.jumpTo(source.offset);
+      }
+    } catch (_) {
     }
     _syncingScroll = false;
   }
@@ -216,28 +220,31 @@ class _LiveTvGuideScreenState extends State<LiveTvGuideScreen> {
 
     return Column(
       children: [
-        Row(
-          children: [
-            const SizedBox(width: _kChannelColumnWidth, height: _kTimeHeaderHeight),
-            Expanded(
-              child: ValueListenableBuilder<double>(
-                valueListenable: _horizontalOffset,
-                builder: (context, offset, child) {
-                  return ClipRect(
-                    child: OverflowBox(
-                      maxWidth: guideWidth,
-                      alignment: Alignment.centerLeft,
-                      child: Transform.translate(
-                        offset: Offset(-offset, 0),
-                        child: child!,
+        SizedBox(
+          height: _kTimeHeaderHeight,
+          child: Row(
+            children: [
+              const SizedBox(width: _kChannelColumnWidth),
+              Expanded(
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _horizontalOffset,
+                  builder: (context, offset, child) {
+                    return ClipRect(
+                      child: OverflowBox(
+                        maxWidth: guideWidth,
+                        alignment: Alignment.centerLeft,
+                        child: Transform.translate(
+                          offset: Offset(-offset, 0),
+                          child: child!,
+                        ),
                       ),
-                    ),
-                  );
-                },
-                child: _buildTimeHeader(guideWidth),
+                    );
+                  },
+                  child: _buildTimeHeader(guideWidth),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const Divider(color: Colors.white24, height: 1),
         Expanded(
