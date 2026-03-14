@@ -10,10 +10,18 @@ class EmbyLiveTvApi implements LiveTvApi {
   Future<Map<String, dynamic>> getChannels({
     int? startIndex,
     int? limit,
+    String? sortBy,
+    String? sortOrder,
+    String? fields,
+    bool? enableTotalRecordCount,
   }) async {
     final response = await _dio.get('/LiveTv/Channels', queryParameters: {
       if (startIndex != null) 'StartIndex': startIndex,
       if (limit != null) 'Limit': limit,
+      if (sortBy != null) 'SortBy': sortBy,
+      if (sortOrder != null) 'SortOrder': sortOrder,
+      if (fields != null) 'Fields': fields,
+      if (enableTotalRecordCount != null) 'EnableTotalRecordCount': enableTotalRecordCount,
     });
     return response.data as Map<String, dynamic>;
   }
@@ -22,10 +30,16 @@ class EmbyLiveTvApi implements LiveTvApi {
   Future<Map<String, dynamic>> getGuide({
     DateTime? startDate,
     DateTime? endDate,
+    List<String>? channelIds,
+    String? fields,
+    bool? enableTotalRecordCount,
   }) async {
     final response = await _dio.get('/LiveTv/Programs', queryParameters: {
       if (startDate != null) 'MinStartDate': startDate.toIso8601String(),
       if (endDate != null) 'MaxEndDate': endDate.toIso8601String(),
+      if (channelIds != null && channelIds.isNotEmpty) 'ChannelIds': channelIds.join(','),
+      if (fields != null) 'Fields': fields,
+      if (enableTotalRecordCount != null) 'EnableTotalRecordCount': enableTotalRecordCount,
     });
     return response.data as Map<String, dynamic>;
   }
