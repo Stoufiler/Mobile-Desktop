@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "org.moonfin.android"
+    namespace = "org.moonfin.tv"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "org.moonfin.android"
+        applicationId = "org.moonfin.tv"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

@@ -1,4 +1,4 @@
-package org.moonfin.android
+package org.moonfin.tv
 
 import io.flutter.embedding.android.FlutterActivity
 
