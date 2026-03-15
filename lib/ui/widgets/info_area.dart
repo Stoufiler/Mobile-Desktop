@@ -127,7 +127,7 @@ class _InfoAreaContentState extends State<_InfoAreaContent> {
           SimpleInfoRow(item: item, showRating: !showRatings),
           const SizedBox(height: 8),
           SizedBox(
-            height: 20,
+            height: 22,
             child: showRatings ? RatingsRow(
               ratings: _ratings,
               communityRating: item.communityRating,
@@ -141,7 +141,7 @@ class _InfoAreaContentState extends State<_InfoAreaContent> {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: overviewLineHeight * 3,
+            height: (overviewLineHeight * 3) + 4,
             child: Text(
               item.overview ?? '',
               style: overviewStyle,

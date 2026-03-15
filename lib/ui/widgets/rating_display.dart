@@ -54,23 +54,30 @@ class RatingsRow extends StatelessWidget {
 
     if (allRatings.isEmpty) return const SizedBox.shrink();
 
-    return Wrap(
-      spacing: 16,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: allRatings.entries.where((e) {
-        if (blocked.contains(e.key)) return false;
-        if (!enableAdditionalRatings) {
-          return enabled.contains(e.key);
-        }
-        return true;
-      }).map((e) {
-        return _SingleRating(
-          source: e.key,
-          value: e.value,
-          showLabel: showLabels,
-        );
-      }).toList(),
+    final items = allRatings.entries.where((e) {
+      if (blocked.contains(e.key)) return false;
+      if (!enableAdditionalRatings) {
+        return enabled.contains(e.key);
+      }
+      return true;
+    }).toList();
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(width: 16),
+            _SingleRating(
+              source: items[i].key,
+              value: items[i].value,
+              showLabel: showLabels,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
