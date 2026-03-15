@@ -140,15 +140,26 @@ class _SeerrDiscoverScreenState extends State<SeerrDiscoverScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final visibleRows = <(int, SeerrDiscoverRow)>[];
+    for (var i = 0; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.type == SeerrRowType.recentRequests &&
+          !row.isLoading &&
+          row.items.isEmpty) {
+        continue;
+      }
+      visibleRows.add((i, row));
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 32),
-      itemCount: rows.length,
+      itemCount: visibleRows.length,
       itemBuilder: (context, index) {
-        final row = rows[index];
+        final (origIndex, row) = visibleRows[index];
         if (row.isGenreRow) return _buildGenreRow(row);
         if (row.isNetworkRow) return _buildNetworkRow(row);
         if (row.isStudioRow) return _buildStudioRow(row);
-        return _buildMediaRow(row, index);
+        return _buildMediaRow(row, origIndex);
       },
     );
   }
