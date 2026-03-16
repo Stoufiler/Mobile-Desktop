@@ -23,4 +23,5 @@ export 'src/api/user_views_api.dart';
 export 'src/api/live_tv_api.dart';
 export 'src/api/instant_mix_api.dart';
 export 'src/api/display_preferences_api.dart';
+export 'src/api/users_api.dart';
 export 'src/feature/feature_detector.dart';

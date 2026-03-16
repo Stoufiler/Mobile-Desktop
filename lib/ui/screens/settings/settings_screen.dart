@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../navigation/destinations.dart';
-import '../../util/platform_detection.dart';
+import '../../../util/platform_detection.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});

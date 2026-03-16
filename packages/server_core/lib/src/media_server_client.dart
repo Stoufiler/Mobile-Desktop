@@ -11,6 +11,7 @@ import 'api/user_views_api.dart';
 import 'api/live_tv_api.dart';
 import 'api/instant_mix_api.dart';
 import 'api/display_preferences_api.dart';
+import 'api/users_api.dart';
 
 abstract class MediaServerClient {
   ServerType get serverType;
@@ -36,6 +37,7 @@ abstract class MediaServerClient {
   LiveTvApi get liveTvApi;
   InstantMixApi get instantMixApi;
   DisplayPreferencesApi get displayPreferencesApi;
+  UsersApi get usersApi;
 
   void dispose();
 }

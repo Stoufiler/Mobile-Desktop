@@ -12,6 +12,7 @@ import 'api/emby_user_views_api.dart';
 import 'api/emby_live_tv_api.dart';
 import 'api/emby_instant_mix_api.dart';
 import 'api/emby_display_preferences_api.dart';
+import 'api/emby_users_api.dart';
 
 class EmbyMediaServerClient extends MediaServerClient {
   final Dio _dio;
@@ -116,6 +117,9 @@ class EmbyMediaServerClient extends MediaServerClient {
   @override
   late final EmbyDisplayPreferencesApi displayPreferencesApi =
       EmbyDisplayPreferencesApi(_dio);
+
+  @override
+  late final UsersApi usersApi = EmbyUsersApi(_dio, _requireUserId);
 
   @override
   void dispose() {

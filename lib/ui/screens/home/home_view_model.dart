@@ -163,10 +163,18 @@ class HomeViewModel extends ChangeNotifier {
   Future<List<HomeRow>> _loadLatestMediaRows() async {
     final viewsResponse = await _client.userViewsApi.getUserViews();
     final views = viewsResponse['Items'] as List? ?? [];
+
+    Set<String> latestExcludes = const {};
+    try {
+      final config = await _client.usersApi.getUserConfiguration();
+      latestExcludes = config.latestItemsExcludes.toSet();
+    } catch (_) {}
+
     final rows = <HomeRow>[];
 
     for (final view in views) {
       final data = view as Map<String, dynamic>;
+      final id = data['Id'] as String;
       final collectionType = data['CollectionType'] as String?;
       if (collectionType == 'music' ||
           collectionType == 'books' ||
@@ -175,7 +183,7 @@ class HomeViewModel extends ChangeNotifier {
           collectionType == 'livetv') {
         continue;
       }
-      final id = data['Id'] as String;
+      if (latestExcludes.contains(id)) continue;
       final name = data['Name'] as String? ?? '';
       try {
         final row = await _dataSource.loadLatestMedia(id, name, _serverId);

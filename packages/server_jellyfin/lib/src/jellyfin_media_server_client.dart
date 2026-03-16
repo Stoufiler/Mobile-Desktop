@@ -12,6 +12,7 @@ import 'api/jellyfin_user_views_api.dart';
 import 'api/jellyfin_live_tv_api.dart';
 import 'api/jellyfin_instant_mix_api.dart';
 import 'api/jellyfin_display_preferences_api.dart';
+import 'api/jellyfin_users_api.dart';
 
 class JellyfinMediaServerClient extends MediaServerClient {
   final Dio _dio;
@@ -106,6 +107,9 @@ class JellyfinMediaServerClient extends MediaServerClient {
   @override
   late final DisplayPreferencesApi displayPreferencesApi =
       JellyfinDisplayPreferencesApi(_dio);
+
+  @override
+  late final UsersApi usersApi = JellyfinUsersApi(_dio);
 
   @override
   void dispose() {

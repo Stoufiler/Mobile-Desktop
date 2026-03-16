@@ -116,3 +116,84 @@ class DisplayPreferences {
         'CustomPrefs': customPrefs,
       };
 }
+
+class UserConfiguration {
+  final List<String> orderedViews;
+  final List<String> latestItemsExcludes;
+  final List<String> myMediaExcludes;
+  final List<String> groupedFolders;
+  final bool hidePlayedInLatest;
+  final bool enableNextEpisodeAutoPlay;
+  final bool playDefaultAudioTrack;
+  final bool rememberAudioSelections;
+  final bool rememberSubtitleSelections;
+  final Map<String, dynamic> _raw;
+
+  const UserConfiguration({
+    this.orderedViews = const [],
+    this.latestItemsExcludes = const [],
+    this.myMediaExcludes = const [],
+    this.groupedFolders = const [],
+    this.hidePlayedInLatest = true,
+    this.enableNextEpisodeAutoPlay = true,
+    this.playDefaultAudioTrack = true,
+    this.rememberAudioSelections = true,
+    this.rememberSubtitleSelections = true,
+    Map<String, dynamic> raw = const {},
+  }) : _raw = raw;
+
+  factory UserConfiguration.fromJson(Map<String, dynamic> json) =>
+      UserConfiguration(
+        orderedViews: _stringList(json['OrderedViews']),
+        latestItemsExcludes: _stringList(json['LatestItemsExcludes']),
+        myMediaExcludes: _stringList(json['MyMediaExcludes']),
+        groupedFolders: _stringList(json['GroupedFolders']),
+        hidePlayedInLatest: json['HidePlayedInLatest'] as bool? ?? true,
+        enableNextEpisodeAutoPlay:
+            json['EnableNextEpisodeAutoPlay'] as bool? ?? true,
+        playDefaultAudioTrack:
+            json['PlayDefaultAudioTrack'] as bool? ?? true,
+        rememberAudioSelections:
+            json['RememberAudioSelections'] as bool? ?? true,
+        rememberSubtitleSelections:
+            json['RememberSubtitleSelections'] as bool? ?? true,
+        raw: json,
+      );
+
+  static List<String> _stringList(dynamic value) {
+    if (value is List) return value.cast<String>();
+    return const [];
+  }
+
+  UserConfiguration copyWith({
+    List<String>? myMediaExcludes,
+    List<String>? latestItemsExcludes,
+  }) {
+    return UserConfiguration(
+      orderedViews: orderedViews,
+      latestItemsExcludes: latestItemsExcludes ?? this.latestItemsExcludes,
+      myMediaExcludes: myMediaExcludes ?? this.myMediaExcludes,
+      groupedFolders: groupedFolders,
+      hidePlayedInLatest: hidePlayedInLatest,
+      enableNextEpisodeAutoPlay: enableNextEpisodeAutoPlay,
+      playDefaultAudioTrack: playDefaultAudioTrack,
+      rememberAudioSelections: rememberAudioSelections,
+      rememberSubtitleSelections: rememberSubtitleSelections,
+      raw: _raw,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final json = Map<String, dynamic>.from(_raw);
+    json['OrderedViews'] = orderedViews;
+    json['LatestItemsExcludes'] = latestItemsExcludes;
+    json['MyMediaExcludes'] = myMediaExcludes;
+    json['GroupedFolders'] = groupedFolders;
+    json['HidePlayedInLatest'] = hidePlayedInLatest;
+    json['EnableNextEpisodeAutoPlay'] = enableNextEpisodeAutoPlay;
+    json['PlayDefaultAudioTrack'] = playDefaultAudioTrack;
+    json['RememberAudioSelections'] = rememberAudioSelections;
+    json['RememberSubtitleSelections'] = rememberSubtitleSelections;
+    return json;
+  }
+}
