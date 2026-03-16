@@ -1114,11 +1114,27 @@ class _ActionButtonsState extends State<_ActionButtons> {
             audioStreamIndex: _selectedAudioIndex,
             subtitleStreamIndex: _selectedSubtitleIndex);
 
+      case 'Episode':
+        final episodes = viewModel.episodes;
+        if (episodes.length > 1) {
+          final startIndex = episodes.indexWhere((e) => e.id == item.id);
+          final idx = startIndex >= 0 ? startIndex : 0;
+          final startPosition = resume
+              ? (episodes[idx].playbackPosition ?? Duration.zero)
+              : Duration.zero;
+          manager.playItems(episodes, startIndex: idx, startPosition: startPosition,
+              audioStreamIndex: _selectedAudioIndex,
+              subtitleStreamIndex: _selectedSubtitleIndex);
+          break;
+        }
+        continue defaultCase;
+
       case 'MusicAlbum':
         final tracks = viewModel.tracks;
         if (tracks.isEmpty) return;
         manager.playItems(tracks);
 
+      defaultCase:
       default:
         final startPosition = resume
             ? (item.playbackPosition ?? Duration.zero)

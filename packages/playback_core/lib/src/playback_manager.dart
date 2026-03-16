@@ -24,6 +24,7 @@ class PlaybackManager {
   int? _maxBitrateOverrideMbps;
   DateTime? _playbackStartTime;
   bool _waitingForMedia = false;
+  bool _isAutoNexting = false;
 
   PlayerBackend? get backend => _backend;
   StreamResolutionResult? get currentResolution => _currentResolution;
@@ -76,16 +77,14 @@ class PlaybackManager {
 
   void _onTrackCompleted(bool completed) {
     if (!completed) return;
-    if (_waitingForMedia) {
-      return;
-    }
+    if (_waitingForMedia || _isAutoNexting) return;
     // Ignore completed events that fire during initial load/seek.
     if (_playbackStartTime != null &&
         DateTime.now().difference(_playbackStartTime!).inSeconds < 5) {
       return;
     }
     // Detect premature transcode stream end.
-    final pos = (_backend?.position ?? Duration.zero) + _transcodeStartOffset;
+    final pos = _lastKnownPosition;
     final dur = _backend?.duration ?? Duration.zero;
     final effectiveDuration = _itemKnownDuration > Duration.zero
         ? _itemKnownDuration
@@ -94,7 +93,8 @@ class PlaybackManager {
         pos < effectiveDuration - const Duration(minutes: 2)) {
       return;
     }
-    _autoNext();
+    _isAutoNexting = true;
+    _autoNext().whenComplete(() => _isAutoNexting = false);
   }
 
   Future<void> _autoNext() async {
@@ -112,6 +112,7 @@ class PlaybackManager {
     int? audioStreamIndex,
     int? subtitleStreamIndex,
   }) async {
+    _isAutoNexting = false;
     await _stopAndReportCurrent();
     _audioStreamIndex = audioStreamIndex;
     _subtitleStreamIndex = subtitleStreamIndex;
@@ -126,6 +127,8 @@ class PlaybackManager {
   }) async {
     final item = queueService.currentItem;
     if (item == null || _backend == null) return;
+
+    _lastKnownPosition = Duration.zero;
 
     if (_resolver == null) {
       throw StateError('No MediaStreamResolver configured');
@@ -282,6 +285,7 @@ class PlaybackManager {
   }
 
   Future<void> seekTo(Duration position) async {
+    _lastKnownPosition = position;
     await _backend?.seekTo(position);
   }
 
