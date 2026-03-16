@@ -5,6 +5,8 @@ import 'package:server_core/server_core.dart';
 
 import '../models/aggregated_item.dart';
 import '../repositories/search_repository.dart';
+import '../repositories/seerr_repository.dart';
+import '../services/seerr/seerr_api_models.dart';
 
 class SearchResultGroup {
   final String title;
@@ -26,8 +28,14 @@ enum SearchState { idle, loading, ready, error }
 class SearchViewModel extends ChangeNotifier {
   final SearchRepository _searchRepository;
   final MediaServerClient _client;
+  SeerrRepository? _seerrRepository;
 
-  SearchViewModel(this._searchRepository, this._client);
+  SearchViewModel(this._searchRepository, this._client, {SeerrRepository? seerrRepository})
+      : _seerrRepository = seerrRepository;
+
+  void setSeerrRepository(SeerrRepository repo) {
+    _seerrRepository = repo;
+  }
 
   ImageApi get imageApi => _client.imageApi;
 
@@ -39,6 +47,9 @@ class SearchViewModel extends ChangeNotifier {
 
   List<SearchResultGroup> _results = const [];
   List<SearchResultGroup> get results => _results;
+
+  List<SeerrDiscoverItem> _seerrResults = const [];
+  List<SeerrDiscoverItem> get seerrResults => _seerrResults;
 
   String _errorMessage = '';
   String get errorMessage => _errorMessage;
@@ -74,6 +85,7 @@ class SearchViewModel extends ChangeNotifier {
 
     if (trimmed.isEmpty) {
       _results = const [];
+      _seerrResults = const [];
       _state = SearchState.idle;
       notifyListeners();
       return;
@@ -111,11 +123,15 @@ class SearchViewModel extends ChangeNotifier {
         return group.copyWith(items: items);
       });
 
+      final seerrFuture = _fetchSeerrResults(query);
+
       final groups = await Future.wait(futures);
+      final seerr = await seerrFuture;
 
       if (query != _query) return;
 
       _results = groups.where((g) => g.items.isNotEmpty).toList();
+      _seerrResults = seerr;
       _state = SearchState.ready;
     } catch (e) {
       if (query != _query) return;
@@ -123,6 +139,19 @@ class SearchViewModel extends ChangeNotifier {
       _state = SearchState.error;
     }
     notifyListeners();
+  }
+
+  Future<List<SeerrDiscoverItem>> _fetchSeerrResults(String query) async {
+    final repo = _seerrRepository;
+    if (repo == null) return const [];
+    try {
+      await repo.ensureInitialized();
+      if (!repo.isAvailable) return const [];
+      final page = await repo.search(query, limit: _resultLimit);
+      return page.results;
+    } catch (_) {
+      return const [];
+    }
   }
 
   @override
