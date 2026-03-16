@@ -62,11 +62,21 @@ class MediaSegmentService {
 
     for (final segment in _segments) {
       if (position >= segment.start && position < segment.end) {
+        final action = actionMap[segment.type] ?? MediaSegmentAction.nothing;
+
         if (_activeSegment?.id == segment.id) {
+          if (action == MediaSegmentAction.askToSkip) {
+            return SegmentCheckResult(
+              action: MediaSegmentAction.askToSkip,
+              segment: segment,
+              skipTo: segment.end,
+              isNew: false,
+            );
+          }
           return SegmentCheckResult.none;
         }
+
         _activeSegment = segment;
-        final action = actionMap[segment.type] ?? MediaSegmentAction.nothing;
         if (action == MediaSegmentAction.nothing) {
           return SegmentCheckResult.none;
         }
@@ -93,9 +103,7 @@ class MediaSegmentService {
       }
     }
 
-    if (_activeSegment != null) {
-      _activeSegment = null;
-    }
+    _activeSegment = null;
     return SegmentCheckResult.none;
   }
 }
@@ -104,11 +112,13 @@ class SegmentCheckResult {
   final MediaSegmentAction action;
   final MediaSegment? segment;
   final Duration? skipTo;
+  final bool isNew;
 
   const SegmentCheckResult({
     this.action = MediaSegmentAction.nothing,
     this.segment,
     this.skipTo,
+    this.isNew = true,
   });
 
   static const none = SegmentCheckResult();

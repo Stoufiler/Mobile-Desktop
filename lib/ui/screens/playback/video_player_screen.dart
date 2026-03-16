@@ -154,16 +154,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     final result = _segmentService.checkPosition(position);
     if (result.shouldSkip && result.skipTo != null) {
       _manager.seekTo(result.skipTo!);
+      setState(() {
+        _skipSegment = null;
+        _skipTo = null;
+      });
       return;
     }
-    if (result.action == MediaSegmentAction.askToSkip && result.segment != null) {
-      if (_skipSegment?.id != result.segment!.id) {
-        setState(() {
-          _skipSegment = result.segment;
-          _skipTo = result.skipTo;
-        });
-      }
-    } else if (_skipSegment != null && result.action == MediaSegmentAction.nothing) {
+    if (result.shouldAsk && result.isNew && result.segment != null) {
+      setState(() {
+        _skipSegment = result.segment;
+        _skipTo = result.skipTo;
+      });
+    } else if (result.isNone && _skipSegment != null) {
       setState(() {
         _skipSegment = null;
         _skipTo = null;
