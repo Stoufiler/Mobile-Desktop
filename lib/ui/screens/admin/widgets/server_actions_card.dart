@@ -44,6 +44,8 @@ class ServerActionsCard extends StatelessWidget {
                       message: 'Are you sure you want to restart the server?',
                       onConfirm: () async {
                         await client.adminSystemApi.restartServer();
+                        if (!context.mounted) return;
+                        await _waitForServer(context);
                         onActionComplete();
                       },
                     ),
@@ -87,6 +89,44 @@ class ServerActionsCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _waitForServer(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 24),
+              Expanded(child: Text('Server is restarting...')),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await Future.delayed(const Duration(seconds: 3));
+
+    for (var i = 0; i < 60; i++) {
+      try {
+        await client.systemApi.getSystemInfo();
+        if (context.mounted) Navigator.of(context).pop();
+        return;
+      } catch (_) {
+        await Future.delayed(const Duration(seconds: 2));
+      }
+    }
+
+    if (context.mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Server did not respond after restart')),
+      );
+    }
   }
 
   Future<void> _confirmAction(
