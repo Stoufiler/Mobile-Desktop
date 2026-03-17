@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'ui/navigation/app_router.dart';
 import 'ui/theme/app_theme.dart';
+import 'ui/widgets/offline_banner.dart';
 
 class MoonfinApp extends StatelessWidget {
   const MoonfinApp({super.key});
@@ -15,6 +16,14 @@ class MoonfinApp extends StatelessWidget {
         theme: AppTheme.darkTheme,
         routerConfig: appRouter,
         debugShowCheckedModeBanner: false,
+        builder: (context, child) {
+          return Column(
+            children: [
+              const OfflineBanner(),
+              Expanded(child: child ?? const SizedBox.shrink()),
+            ],
+          );
+        },
       ),
     );
   }

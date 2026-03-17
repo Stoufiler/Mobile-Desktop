@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../auth/repositories/session_repository.dart';
 import '../../auth/repositories/user_repository.dart';
+import '../../data/services/connectivity_service.dart';
 import '../../di/injection.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/server_screen.dart';
@@ -82,6 +83,9 @@ import '../screens/admin/plugins/admin_plugins_screen.dart';
 import '../screens/admin/plugins/admin_plugin_detail_screen.dart';
 import '../screens/admin/plugins/admin_repositories_screen.dart';
 import '../screens/admin/devices/admin_devices_screen.dart';
+import '../screens/downloads/saved_media_screen.dart';
+import '../screens/downloads/saved_season_screen.dart';
+import '../screens/downloads/saved_series_screen.dart';
 import 'destinations.dart';
 
 const _authRoutes = {
@@ -90,6 +94,13 @@ const _authRoutes = {
   Destinations.server,
   Destinations.login,
 };
+
+bool _isOfflineAllowed(String path) {
+  if (path.startsWith('/downloads')) return true;
+  if (path.startsWith('/settings')) return true;
+  if (path == Destinations.videoPlayer || path == Destinations.audioPlayer) return true;
+  return false;
+}
 
 final appRouter = GoRouter(
   initialLocation: Destinations.startup,
@@ -103,6 +114,11 @@ final appRouter = GoRouter(
     if (path.startsWith('/admin')) {
       final user = getIt<UserRepository>().currentUser;
       if (user == null || !user.isAdministrator) return Destinations.home;
+    }
+
+    final connectivity = GetIt.instance<ConnectivityService>();
+    if (!connectivity.canReachServer && !_isOfflineAllowed(path)) {
+      return Destinations.downloads;
     }
 
     return null;
@@ -553,6 +569,28 @@ final appRouter = GoRouter(
         final personId = state.pathParameters['personId']!;
         return SeerrPersonScreen(personId: personId);
       },
+    ),
+
+    // Downloads / Saved Media
+    GoRoute(
+      path: Destinations.downloads,
+      builder: (context, state) => const SavedMediaScreen(),
+      routes: [
+        GoRoute(
+          path: 'series/:seriesId',
+          builder: (context, state) => SavedSeriesScreen(
+            seriesId: state.pathParameters['seriesId']!,
+          ),
+          routes: [
+            GoRoute(
+              path: 'season/:seasonId',
+              builder: (context, state) => SavedSeasonScreen(
+                seasonId: state.pathParameters['seasonId']!,
+              ),
+            ),
+          ],
+        ),
+      ],
     ),
   ],
 );

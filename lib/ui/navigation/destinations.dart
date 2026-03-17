@@ -109,6 +109,11 @@ class Destinations {
   static const seerrMediaDetail = '/seerr/media/:itemId';
   static const seerrPersonDetail = '/seerr/person/:personId';
 
+  // Downloads / Saved Media
+  static const downloads = '/downloads';
+  static const downloadsSeries = '/downloads/series/:seriesId';
+  static const downloadsSeason = '/downloads/series/:seriesId/season/:seasonId';
+
   static String library(String libraryId) => '/library/$libraryId';
   static String libraryView(String libraryId) => '/library-view/$libraryId';
   static String libraryGenresOf(String libraryId) =>
@@ -144,6 +149,11 @@ class Destinations {
   static String seerrMedia(String itemId) => '/seerr/media/$itemId';
   static String seerrPerson(String personId) =>
       '/seerr/person/$personId';
+
+  static String downloadedSeries(String seriesId) =>
+      '/downloads/series/$seriesId';
+  static String downloadedSeason(String seriesId, String seasonId) =>
+      '/downloads/series/$seriesId/season/$seasonId';
 
   static String adminUser(String userId) => '/admin/users/$userId';
   static String adminLibrary(String libraryId) => '/admin/libraries/$libraryId';

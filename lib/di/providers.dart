@@ -4,6 +4,7 @@ import 'package:server_core/server_core.dart';
 
 import '../auth/models/user.dart';
 import '../auth/repositories/user_repository.dart';
+import '../data/services/connectivity_service.dart';
 import '../data/services/media_server_client_factory.dart';
 import '../data/services/socket_handler.dart';
 import '../preference/user_preferences.dart';
@@ -46,4 +47,11 @@ Stream<User?> _seededStream(UserRepository repo) async* {
 final isAdminProvider = Provider<bool>((ref) {
   final userAsync = ref.watch(currentUserProvider);
   return userAsync.valueOrNull?.isAdministrator ?? false;
+});
+
+final connectivityServiceProvider =
+    ChangeNotifierProvider<ConnectivityService>((_) => getIt<ConnectivityService>());
+
+final isOnlineProvider = Provider<bool>((ref) {
+  return ref.watch(connectivityServiceProvider).canReachServer;
 });

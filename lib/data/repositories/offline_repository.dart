@@ -220,6 +220,16 @@ class OfflineRepository {
     return query.watch();
   }
 
+  Stream<List<DownloadedItem>> watchSeasonEpisodes(String seasonId, String serverId) {
+    final query = _db.select(_db.downloadedItems)
+      ..where((t) =>
+          t.serverId.equals(serverId) &
+          t.seasonId.equals(seasonId) &
+          t.type.equals('Episode'))
+      ..orderBy([(t) => OrderingTerm.asc(t.indexNumber)]);
+    return query.watch();
+  }
+
   Map<String, dynamic> rowToRawData(DownloadedItem row) {
     return jsonDecode(row.metadataJson) as Map<String, dynamic>;
   }

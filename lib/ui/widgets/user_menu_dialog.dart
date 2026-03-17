@@ -67,6 +67,14 @@ void showUserMenu(BuildContext context) {
                 context.push(Destinations.settings);
               },
             ),
+            _MenuRow(
+              icon: Icons.download_done_rounded,
+              label: 'Saved Media',
+              onTap: () {
+                Navigator.pop(ctx);
+                context.push(Destinations.downloads);
+              },
+            ),
             const SizedBox(height: 4),
             Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
             const SizedBox(height: 4),

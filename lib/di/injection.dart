@@ -7,6 +7,7 @@ import '../auth/store/authentication_store.dart';
 import '../data/database/database_connection.dart';
 import '../data/database/offline_database.dart';
 import '../data/repositories/offline_repository.dart';
+import '../data/services/connectivity_service.dart';
 import '../data/services/storage_path_service.dart';
 import '../util/platform_detection.dart';
 import 'modules/app_module.dart';
@@ -54,6 +55,10 @@ Future<void> configureDependencies() async {
   getIt.registerSingleton<OfflineRepository>(
     OfflineRepository(getIt<OfflineDatabase>()),
   );
+
+  final connectivityService = ConnectivityService();
+  connectivityService.initialize();
+  getIt.registerSingleton<ConnectivityService>(connectivityService);
 
   registerServerModule();
   registerAuthModule();
