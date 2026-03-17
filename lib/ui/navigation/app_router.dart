@@ -71,6 +71,10 @@ import '../screens/admin/libraries/admin_library_edit_screen.dart';
 import '../screens/admin/tasks/admin_tasks_screen.dart';
 import '../screens/admin/tasks/admin_task_detail_screen.dart';
 import '../screens/admin/activity/admin_activity_screen.dart';
+import '../screens/admin/settings/admin_general_settings_screen.dart';
+import '../screens/admin/settings/admin_branding_screen.dart';
+import '../screens/admin/settings/admin_networking_screen.dart';
+import '../screens/admin/settings/admin_playback_settings_screen.dart';
 import 'destinations.dart';
 
 const _authRoutes = {
@@ -351,19 +355,19 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: Destinations.adminSettings,
-          builder: (context, state) => const _AdminPlaceholder(title: 'Server Settings'),
+          builder: (context, state) => const AdminGeneralSettingsScreen(),
         ),
         GoRoute(
           path: Destinations.adminSettingsPlayback,
-          builder: (context, state) => const _AdminPlaceholder(title: 'Playback Settings'),
+          builder: (context, state) => const AdminPlaybackSettingsScreen(),
         ),
         GoRoute(
           path: Destinations.adminSettingsNetworking,
-          builder: (context, state) => const _AdminPlaceholder(title: 'Networking'),
+          builder: (context, state) => const AdminNetworkingScreen(),
         ),
         GoRoute(
           path: Destinations.adminSettingsBranding,
-          builder: (context, state) => const _AdminPlaceholder(title: 'Branding'),
+          builder: (context, state) => const AdminBrandingScreen(),
         ),
         GoRoute(
           path: Destinations.adminTasks,
