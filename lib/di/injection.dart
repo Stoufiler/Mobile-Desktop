@@ -4,6 +4,10 @@ import 'package:server_core/server_core.dart';
 import 'package:uuid/uuid.dart';
 
 import '../auth/store/authentication_store.dart';
+import '../data/database/database_connection.dart';
+import '../data/database/offline_database.dart';
+import '../data/repositories/offline_repository.dart';
+import '../data/services/storage_path_service.dart';
 import '../util/platform_detection.dart';
 import 'modules/app_module.dart';
 import 'modules/auth_module.dart';
@@ -41,6 +45,15 @@ Future<void> configureDependencies() async {
   ));
 
   registerPreferenceModule(preferenceStore);
+
+  final storagePath = StoragePathService();
+  getIt.registerSingleton<StoragePathService>(storagePath);
+  getIt.registerSingleton<OfflineDatabase>(
+    OfflineDatabase(openConnection(() => storagePath.getDatabaseFile())),
+  );
+  getIt.registerSingleton<OfflineRepository>(
+    OfflineRepository(getIt<OfflineDatabase>()),
+  );
 
   registerServerModule();
   registerAuthModule();

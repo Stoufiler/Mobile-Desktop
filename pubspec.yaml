@@ -30,6 +30,8 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   path_provider: ^2.1.5
   permission_handler: ^11.3.1
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.30
 
   # Media Playback
   media_kit: ^1.1.11
@@ -79,6 +81,7 @@ dev_dependencies:
   json_serializable: ^6.9.4
   injectable_generator: ^2.7.0
   riverpod_generator: ^2.6.3
+  drift_dev: ^2.22.1
   mocktail: ^1.0.4
   msix: ^3.16.8
 

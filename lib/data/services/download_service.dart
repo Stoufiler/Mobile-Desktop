@@ -1,12 +1,18 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:get_it/get_it.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:server_core/server_core.dart';
 
+import '../database/offline_database.dart';
 import '../models/aggregated_item.dart';
+import '../models/download_quality.dart';
+import '../repositories/offline_repository.dart';
+import 'storage_path_service.dart';
 
 class DownloadProgress {
   final String itemId;
@@ -51,32 +57,12 @@ class DownloadService extends ChangeNotifier {
     return status.isGranted;
   }
 
+  StoragePathService get _storagePath => GetIt.instance<StoragePathService>();
+  OfflineRepository get _offlineRepo => GetIt.instance<OfflineRepository>();
+
   Future<Directory> _getDownloadsDir() async {
-    if (Platform.isAndroid) {
-      final granted = await _requestStoragePermission();
-      if (granted) {
-        final dir = Directory('/storage/emulated/0/Download/Moonfin');
-        if (!await dir.exists()) await dir.create(recursive: true);
-        return dir;
-      }
-      final extDirs = await getExternalStorageDirectories();
-      final base = extDirs != null && extDirs.isNotEmpty
-          ? extDirs.first
-          : await getApplicationDocumentsDirectory();
-      final dir = Directory('${base.path}/Downloads');
-      if (!await dir.exists()) await dir.create(recursive: true);
-      return dir;
-    }
-    final downloadsDir = await getDownloadsDirectory();
-    if (downloadsDir != null) {
-      final moonfin = Directory('${downloadsDir.path}/Moonfin');
-      if (!await moonfin.exists()) await moonfin.create(recursive: true);
-      return moonfin;
-    }
-    final appDir = await getApplicationDocumentsDirectory();
-    final fallback = Directory('${appDir.path}/Downloads/Moonfin');
-    if (!await fallback.exists()) await fallback.create(recursive: true);
-    return fallback;
+    if (Platform.isAndroid) await _requestStoragePermission();
+    return _storagePath.getOfflineRoot();
   }
 
   String _sanitizePath(String name) {
@@ -102,8 +88,8 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  String _buildFileName(AggregatedItem item) {
-    final container = _getContainer(item);
+  String _buildFileName(AggregatedItem item, DownloadQuality quality) {
+    final container = _getContainer(item, quality);
     switch (item.type) {
       case 'Episode':
         final s = item.parentIndexNumber;
@@ -117,7 +103,8 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  String _getContainer(AggregatedItem item) {
+  String _getContainer(AggregatedItem item, DownloadQuality quality) {
+    if (quality.isTranscoded) return quality.container;
     if (item.mediaSources.isNotEmpty) {
       final c = item.mediaSources.first['Container'] as String?;
       if (c != null && c.isNotEmpty) return c.toLowerCase();
@@ -125,15 +112,36 @@ class DownloadService extends ChangeNotifier {
     return 'mkv';
   }
 
-  String _buildDownloadUrl(String itemId, AggregatedItem item) {
+  String _buildDownloadUrl(String itemId, AggregatedItem item, DownloadQuality quality) {
     final baseUrl = _client.baseUrl;
     final mediaSourceId =
         item.mediaSources.isNotEmpty ? item.mediaSources.first['Id'] as String? : null;
     final params = <String, String>{
       if (mediaSourceId != null) 'MediaSourceId': mediaSourceId,
-      'Static': 'true',
       if (_client.accessToken != null) 'api_key': _client.accessToken!,
     };
+
+    if (quality.isTranscoded) {
+      params['Static'] = 'false';
+      params['videoCodec'] = quality.videoCodec;
+      params['audioCodec'] = quality.audioCodec;
+      if (quality.videoBitRate != null) {
+        params['videoBitRate'] = quality.videoBitRate.toString();
+      }
+      if (quality.audioBitRate != null) {
+        params['audioBitRate'] = quality.audioBitRate.toString();
+      }
+      if (quality.maxWidth != null) {
+        params['maxWidth'] = quality.maxWidth.toString();
+      }
+      params['container'] = quality.container;
+      if (quality.audioChannels != null) {
+        params['audioChannels'] = quality.audioChannels.toString();
+      }
+    } else {
+      params['Static'] = 'true';
+    }
+
     final query = params.entries.map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}').join('&');
     return '$baseUrl/Videos/$itemId/stream?$query';
   }
@@ -144,17 +152,36 @@ class DownloadService extends ChangeNotifier {
     return AggregatedItem(id: item.id, serverId: item.serverId, rawData: data);
   }
 
-  Future<void> downloadItem(AggregatedItem item) async {
+  Future<void> downloadItem(AggregatedItem item, {DownloadQuality quality = DownloadQuality.original}) async {
     if (isDownloading(item.id)) return;
 
     try {
       final fullItem = await _ensureFullItem(item);
       final downloadsDir = await _getDownloadsDir();
       final subFolder = _buildSubFolder(fullItem);
-      final fileName = _buildFileName(fullItem);
+      final fileName = _buildFileName(fullItem, quality);
       final dir = Directory('${downloadsDir.path}/$subFolder');
       if (!await dir.exists()) await dir.create(recursive: true);
       final savePath = '${dir.path}/$fileName';
+
+      await _offlineRepo.upsertItem(DownloadedItemsCompanion(
+        itemId: Value(item.id),
+        serverId: Value(item.serverId),
+        type: Value(item.type ?? 'Unknown'),
+        name: Value(item.name),
+        metadataJson: Value(jsonEncode(fullItem.rawData)),
+        downloadStatus: const Value(1),
+        qualityPreset: Value(quality.name),
+        seriesId: Value(item.seriesId),
+        seasonId: Value(item.seasonId),
+        seriesName: Value(item.seriesName),
+        seasonName: Value(fullItem.rawData['SeasonName'] as String?),
+        indexNumber: Value(item.indexNumber),
+        parentIndexNumber: Value(item.parentIndexNumber),
+      ));
+
+      _downloadImages(fullItem);
+      _ensureParentContainers(fullItem);
 
       final cancelToken = CancelToken();
       _cancelTokens[item.id] = cancelToken;
@@ -165,7 +192,7 @@ class DownloadService extends ChangeNotifier {
       );
       notifyListeners();
 
-      final url = _buildDownloadUrl(item.id, fullItem);
+      final url = _buildDownloadUrl(item.id, fullItem, quality);
       await _downloadDio.download(
         url,
         savePath,
@@ -177,9 +204,15 @@ class DownloadService extends ChangeNotifier {
             fileName: fileName,
             progress: progress,
           );
+          _offlineRepo.updateDownloadStatus(item.id, item.serverId, 1, progress: progress);
           notifyListeners();
         },
       );
+
+      final fileSize = await File(savePath).length();
+      await _offlineRepo.setLocalFilePath(item.id, item.serverId, savePath, fileSize: fileSize);
+      await _offlineRepo.updateDownloadStatus(item.id, item.serverId, 2);
+
       _activeDownloads[item.id] = DownloadProgress(
         itemId: item.id,
         fileName: fileName,
@@ -190,12 +223,14 @@ class DownloadService extends ChangeNotifier {
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
         _activeDownloads.remove(item.id);
+        await _offlineRepo.deleteItem(item.id, item.serverId);
       } else {
         _activeDownloads[item.id] = DownloadProgress(
           itemId: item.id,
           fileName: item.name,
           error: e.message ?? 'Download failed',
         );
+        await _offlineRepo.updateDownloadStatus(item.id, item.serverId, 3, error: e.message);
       }
     } catch (e) {
       _activeDownloads[item.id] = DownloadProgress(
@@ -203,19 +238,20 @@ class DownloadService extends ChangeNotifier {
         fileName: item.name,
         error: e.toString(),
       );
+      await _offlineRepo.updateDownloadStatus(item.id, item.serverId, 3, error: e.toString());
     } finally {
       _cancelTokens.remove(item.id);
       notifyListeners();
     }
   }
 
-  Future<void> downloadEpisodes(List<AggregatedItem> episodes) async {
+  Future<void> downloadEpisodes(List<AggregatedItem> episodes, {DownloadQuality quality = DownloadQuality.original}) async {
     _totalQueued = episodes.length;
     _completedCount = 0;
     notifyListeners();
 
     for (final episode in episodes) {
-      await downloadItem(episode);
+      await downloadItem(episode, quality: quality);
     }
 
     _totalQueued = 0;
@@ -243,9 +279,196 @@ class DownloadService extends ChangeNotifier {
     return allEpisodes;
   }
 
-  Future<void> downloadSeries(String seriesId) async {
+  Future<void> downloadSeries(String seriesId, {DownloadQuality quality = DownloadQuality.original}) async {
     final episodes = await _getAllEpisodesForSeries(seriesId);
-    await downloadEpisodes(episodes);
+    await downloadEpisodes(episodes, quality: quality);
+  }
+
+  Future<bool> deleteDownloadedFiles(AggregatedItem item) async {
+    try {
+      final downloadsDir = await _getDownloadsDir();
+      final subFolder = _buildSubFolder(item);
+      final targetDir = Directory('${downloadsDir.path}/$subFolder');
+      final imageDir = await _storagePath.getImageCacheDir();
+
+      switch (item.type) {
+        case 'Movie':
+          if (await targetDir.exists()) await targetDir.delete(recursive: true);
+          await _deleteItemImages(item.id, imageDir);
+          await _offlineRepo.deleteItem(item.id, item.serverId);
+          return true;
+
+        case 'Episode':
+          for (final quality in DownloadQuality.values) {
+            final fileName = _buildFileName(item, quality);
+            final file = File('${targetDir.path}/$fileName');
+            if (await file.exists()) await file.delete();
+          }
+          if (await targetDir.exists()) {
+            final remaining = await targetDir.list().length;
+            if (remaining == 0) {
+              await targetDir.delete();
+              final seriesDir = targetDir.parent;
+              if (await seriesDir.exists()) {
+                final seriesRemaining = await seriesDir.list().length;
+                if (seriesRemaining == 0) await seriesDir.delete();
+              }
+            }
+          }
+          await _deleteItemImages(item.id, imageDir);
+          await _offlineRepo.deleteItem(item.id, item.serverId);
+          return true;
+
+        case 'Season':
+          if (await targetDir.exists()) {
+            await targetDir.delete(recursive: true);
+            final seriesDir = targetDir.parent;
+            if (await seriesDir.exists()) {
+              final remaining = await seriesDir.list().length;
+              if (remaining == 0) await seriesDir.delete();
+            }
+          }
+          await _offlineRepo.deleteSeasonItems(item.id, item.serverId);
+          return true;
+
+        case 'Series':
+          final seriesName = _sanitizePath(item.seriesName ?? item.name);
+          final seriesDir = Directory('${downloadsDir.path}/TV/$seriesName');
+          if (await seriesDir.exists()) await seriesDir.delete(recursive: true);
+          await _offlineRepo.deleteSeriesItems(item.id, item.serverId);
+          return true;
+
+        default:
+          final defaultDir = Directory('${downloadsDir.path}/Other/${_sanitizePath(item.name)}');
+          if (await defaultDir.exists()) await defaultDir.delete(recursive: true);
+          await _offlineRepo.deleteItem(item.id, item.serverId);
+          return true;
+      }
+    } catch (e) {
+      debugPrint('Failed to delete downloaded files: $e');
+      return false;
+    }
+  }
+
+  Future<void> _deleteItemImages(String itemId, Directory imageDir) async {
+    final dir = Directory('${imageDir.path}/$itemId');
+    if (await dir.exists()) await dir.delete(recursive: true);
+  }
+
+  Future<bool> hasDownloadedFiles(AggregatedItem item) async {
+    return _offlineRepo.isAvailableOffline(item.id, item.serverId);
+  }
+
+  Future<void> _downloadImages(AggregatedItem item) async {
+    try {
+      final imageDir = await _storagePath.getImageCacheDir();
+      final itemDir = Directory('${imageDir.path}/${item.id}');
+      if (!await itemDir.exists()) await itemDir.create(recursive: true);
+
+      String? posterPath, backdropPath, logoPath;
+
+      if (item.primaryImageTag != null) {
+        final url = _client.imageApi.getPrimaryImageUrl(item.id, maxHeight: 500, tag: item.primaryImageTag);
+        posterPath = '${itemDir.path}/poster.jpg';
+        try {
+          await _downloadDio.download(url, posterPath);
+        } catch (_) {
+          posterPath = null;
+        }
+      }
+
+      if (item.backdropImageTags.isNotEmpty) {
+        final url = _client.imageApi.getBackdropImageUrl(item.id, maxWidth: 1920, tag: item.backdropImageTags.first);
+        backdropPath = '${itemDir.path}/backdrop.jpg';
+        try {
+          await _downloadDio.download(url, backdropPath);
+        } catch (_) {
+          backdropPath = null;
+        }
+      } else if (item.parentBackdropItemId != null && item.parentBackdropImageTags.isNotEmpty) {
+        final url = _client.imageApi.getBackdropImageUrl(
+          item.parentBackdropItemId!,
+          maxWidth: 1920,
+          tag: item.parentBackdropImageTags.first,
+        );
+        backdropPath = '${itemDir.path}/backdrop.jpg';
+        try {
+          await _downloadDio.download(url, backdropPath);
+        } catch (_) {
+          backdropPath = null;
+        }
+      }
+
+      if (item.logoImageTag != null) {
+        final url = _client.imageApi.getLogoImageUrl(item.id, maxWidth: 500, tag: item.logoImageTag);
+        logoPath = '${itemDir.path}/logo.png';
+        try {
+          await _downloadDio.download(url, logoPath);
+        } catch (_) {
+          logoPath = null;
+        }
+      }
+
+      await _offlineRepo.setImagePaths(
+        item.id,
+        item.serverId,
+        poster: posterPath,
+        backdrop: backdropPath,
+        logo: logoPath,
+      );
+    } catch (e) {
+      debugPrint('Failed to download images for ${item.id}: $e');
+    }
+  }
+
+  Future<void> _ensureParentContainers(AggregatedItem episode) async {
+    if (episode.type != 'Episode') return;
+
+    if (episode.seriesId != null) {
+      final existing = await _offlineRepo.getItem(episode.seriesId!, episode.serverId);
+      if (existing == null) {
+        try {
+          final seriesData = await _client.itemsApi.getItem(episode.seriesId!);
+          final seriesItem = AggregatedItem(id: episode.seriesId!, serverId: episode.serverId, rawData: seriesData);
+          await _offlineRepo.upsertItem(DownloadedItemsCompanion(
+            itemId: Value(episode.seriesId!),
+            serverId: Value(episode.serverId),
+            type: const Value('Series'),
+            name: Value(seriesItem.name),
+            metadataJson: Value(jsonEncode(seriesData)),
+            downloadStatus: const Value(2),
+            seriesName: Value(seriesItem.name),
+          ));
+          _downloadImages(seriesItem);
+        } catch (e) {
+          debugPrint('Failed to fetch series container: $e');
+        }
+      }
+    }
+
+    if (episode.seasonId != null) {
+      final existing = await _offlineRepo.getItem(episode.seasonId!, episode.serverId);
+      if (existing == null) {
+        try {
+          final seasonData = await _client.itemsApi.getItem(episode.seasonId!);
+          final seasonItem = AggregatedItem(id: episode.seasonId!, serverId: episode.serverId, rawData: seasonData);
+          await _offlineRepo.upsertItem(DownloadedItemsCompanion(
+            itemId: Value(episode.seasonId!),
+            serverId: Value(episode.serverId),
+            type: const Value('Season'),
+            name: Value(seasonItem.name),
+            metadataJson: Value(jsonEncode(seasonData)),
+            downloadStatus: const Value(2),
+            seriesId: Value(episode.seriesId),
+            seriesName: Value(episode.seriesName),
+            seasonName: Value(seasonItem.name),
+          ));
+          _downloadImages(seasonItem);
+        } catch (e) {
+          debugPrint('Failed to fetch season container: $e');
+        }
+      }
+    }
   }
 
   void cancelDownload(String itemId) {

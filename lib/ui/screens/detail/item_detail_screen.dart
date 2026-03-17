@@ -12,6 +12,7 @@ import '../../../data/repositories/item_mutation_repository.dart';
 import '../../../data/repositories/mdblist_repository.dart';
 import '../../../data/services/background_service.dart';
 import '../../../data/services/download_service.dart';
+import '../../../data/models/download_quality.dart';
 import '../../../data/services/media_server_client_factory.dart';
 import '../../../data/services/theme_music_service.dart';
 import '../../../data/viewmodels/item_detail_view_model.dart';
@@ -1074,6 +1075,8 @@ class _ActionButtonsState extends State<_ActionButtons> {
           item: item,
           viewModel: viewModel,
         ),
+      if (_isDownloadable(item.type))
+        _DeleteDownloadButton(item: item),
       if (item.type == 'Episode' && item.seriesId != null)
         _DetailActionButton(
           label: 'Go to Series',
@@ -1288,17 +1291,67 @@ class _DownloadButton extends StatelessWidget {
         return _DetailActionButton(
           label: isMulti ? 'Download All' : 'Download',
           icon: Icons.download,
-          onPressed: () => _startDownload(context, downloadService),
+          onPressed: () => _showQualityPicker(context, downloadService),
         );
       },
     );
   }
 
-  void _startDownload(BuildContext context, DownloadService service) {
+  void _showQualityPicker(BuildContext context, DownloadService service) {
+    final isMulti = item.type == 'Season' || item.type == 'Series';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                isMulti ? 'Download All — Quality' : 'Download Quality',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ),
+            ...DownloadQuality.values.map((quality) => ListTile(
+                  leading: Icon(
+                    quality.isTranscoded ? Icons.compress : Icons.file_copy_outlined,
+                    color: Colors.white70,
+                  ),
+                  title: Text(
+                    quality.label,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  subtitle: Text(
+                    quality.isTranscoded
+                        ? '${quality.estimatedSizePerHour} • H.264/AAC'
+                        : 'Original file, no re-encoding',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _startDownload(context, service, quality);
+                  },
+                )),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _startDownload(BuildContext context, DownloadService service, DownloadQuality quality) {
     switch (item.type) {
       case 'Movie':
       case 'Episode':
-        service.downloadItem(item);
+        service.downloadItem(item, quality: quality);
       case 'Season':
         final episodes = viewModel.episodes;
         if (episodes.isEmpty) {
@@ -1307,17 +1360,109 @@ class _DownloadButton extends StatelessWidget {
           );
           return;
         }
-        service.downloadEpisodes(episodes);
+        service.downloadEpisodes(episodes, quality: quality);
       case 'Series':
-        service.downloadSeries(item.id);
+        service.downloadSeries(item.id, quality: quality);
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Downloading ${item.name}...'),
+        content: Text('Downloading ${item.name} (${quality.label})...'),
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+}
+
+class _DeleteDownloadButton extends StatefulWidget {
+  final AggregatedItem item;
+
+  const _DeleteDownloadButton({required this.item});
+
+  @override
+  State<_DeleteDownloadButton> createState() => _DeleteDownloadButtonState();
+}
+
+class _DeleteDownloadButtonState extends State<_DeleteDownloadButton> {
+  bool _hasFiles = false;
+  bool _checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFiles();
+  }
+
+  Future<void> _checkFiles() async {
+    final service = GetIt.instance<DownloadService>();
+    final exists = await service.hasDownloadedFiles(widget.item);
+    if (mounted) {
+      setState(() {
+        _hasFiles = exists;
+        _checking = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_checking || !_hasFiles) return const SizedBox.shrink();
+
+    return _DetailActionButton(
+      label: 'Delete Files',
+      icon: Icons.delete_outline,
+      onPressed: () => _confirmDelete(context),
+      isActive: true,
+      activeColor: const Color(0xFFFF4757),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final item = widget.item;
+    final typeLabel = switch (item.type) {
+      'Series' => 'all downloaded episodes for "${item.seriesName ?? item.name}"',
+      'Season' => 'all downloaded episodes in this season',
+      _ => '"${item.name}"',
+    };
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Delete Downloaded Files', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'Delete local files for $typeLabel?\n\nThis will free up storage space. You can re-download later.',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF4757)),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final service = GetIt.instance<DownloadService>();
+      final success = await service.deleteDownloadedFiles(item);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Downloaded files deleted' : 'Failed to delete files'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        if (success) {
+          setState(() => _hasFiles = false);
+        }
+      }
+    }
   }
 }
 
