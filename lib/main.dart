@@ -9,6 +9,7 @@ import 'data/services/download_notification_service.dart';
 import 'data/services/media_server_client_factory.dart';
 import 'di/injection.dart';
 import 'playback/audio_handler.dart';
+import 'playback/playback_lifecycle_handler.dart';
 import 'util/platform_detection.dart';
 
 void main() async {
@@ -32,6 +33,12 @@ void main() async {
     manager: GetIt.instance<PlaybackManager>(),
     clientFactory: GetIt.instance<MediaServerClientFactory>(),
   );
+
+  if (!GetIt.instance.isRegistered<PlaybackLifecycleHandler>()) {
+    GetIt.instance.registerSingleton<PlaybackLifecycleHandler>(
+      PlaybackLifecycleHandler(GetIt.instance<PlaybackManager>()),
+    );
+  }
 
   runApp(const MoonfinApp());
 }

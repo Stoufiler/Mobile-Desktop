@@ -83,37 +83,42 @@ class _MiniAudioPlayerState extends State<MiniAudioPlayer> {
 
     final bottomPad = MediaQuery.of(context).viewPadding.bottom;
 
-    return GestureDetector(
-      onTap: () => appRouter.push(Destinations.audioPlayer),
-      child: Container(
-        padding: EdgeInsets.only(bottom: bottomPad),
-        color: AppColorScheme.surface,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ProgressSliver(state: _state),
-            SizedBox(
-              height: 62,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    _ArtThumbnail(artUrl: artUrl),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _TrackInfo(item: item),
-                    ),
-                    _TransportButtons(
-                      isPlaying: isPlaying,
-                      onPrev: _manager.previous,
-                      onPlayPause: isPlaying ? _manager.pause : _manager.resume,
-                      onNext: _manager.next,
-                    ),
-                  ],
+    return Dismissible(
+      key: ValueKey('mini-player-${item.id}'),
+      direction: DismissDirection.horizontal,
+      onDismissed: (_) => _manager.stop(),
+      child: GestureDetector(
+        onTap: () => appRouter.push(Destinations.audioPlayer),
+        child: Container(
+          padding: EdgeInsets.only(bottom: bottomPad),
+          color: AppColorScheme.surface,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ProgressSliver(state: _state),
+              SizedBox(
+                height: 62,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      _ArtThumbnail(artUrl: artUrl),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _TrackInfo(item: item),
+                      ),
+                      _TransportButtons(
+                        isPlaying: isPlaying,
+                        onPrev: _manager.previous,
+                        onPlayPause: isPlaying ? _manager.pause : _manager.resume,
+                        onNext: _manager.next,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
