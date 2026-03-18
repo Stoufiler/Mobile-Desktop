@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
@@ -170,9 +169,10 @@ final appRouter = GoRouter(
       builder: (context, state) {
         final libraryId = state.pathParameters['libraryId']!;
         final typesParam = state.uri.queryParameters['types'];
-        final includeItemTypes = typesParam != null
-            ? typesParam.split(',').map(Uri.decodeComponent).toList()
-            : null;
+        final includeItemTypes = typesParam
+          ?.split(',')
+          .map(Uri.decodeComponent)
+          .toList();
         return LibraryBrowseScreen(
           libraryId: libraryId,
           includeItemTypes: includeItemTypes,

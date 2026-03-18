@@ -80,7 +80,9 @@ class ConnectivityService extends ChangeNotifier {
   void _triggerSync() {
     final getIt = GetIt.instance;
     if (!getIt.isRegistered<SyncService>() ||
-        !getIt.isRegistered<MediaServerClient>()) return;
+        !getIt.isRegistered<MediaServerClient>()) {
+      return;
+    }
     final syncService = getIt<SyncService>();
     final client = getIt<MediaServerClient>();
     syncService.syncPlaybackProgress(client);

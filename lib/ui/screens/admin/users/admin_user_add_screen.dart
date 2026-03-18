@@ -4,7 +4,6 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:server_core/server_core.dart';
 
-import '../../../navigation/destinations.dart';
 import '../providers/admin_user_providers.dart';
 
 class AdminUserAddScreen extends ConsumerStatefulWidget {

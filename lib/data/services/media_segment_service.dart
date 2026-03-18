@@ -40,7 +40,7 @@ class MediaSegmentService {
   }
 
   Map<MediaSegmentType, MediaSegmentAction> get actionMap {
-    final raw = _prefs.get(UserPreferences.mediaSegmentActions) as String;
+    final raw = _prefs.get(UserPreferences.mediaSegmentActions);
     final map = <MediaSegmentType, MediaSegmentAction>{};
     for (final part in raw.split(',')) {
       final kv = part.split(':');

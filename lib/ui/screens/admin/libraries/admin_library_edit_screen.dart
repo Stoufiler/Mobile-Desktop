@@ -87,10 +87,12 @@ class _AdminLibraryEditScreenState
         );
       }
     } finally {
-      if (mounted) setState(() {
-        _saving = false;
-        _showBrowser = false;
-      });
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _showBrowser = false;
+        });
+      }
     }
   }
 

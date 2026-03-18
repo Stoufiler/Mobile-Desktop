@@ -349,9 +349,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with WidgetsBindi
   SubtitleViewConfiguration _buildSubtitleConfig() {
     final textColor = Color(_prefs.get(UserPreferences.subtitlesTextColor));
     final bgColor = Color(_prefs.get(UserPreferences.subtitlesBackgroundColor));
-    final prefSize = _prefs.get(UserPreferences.subtitlesTextSize) as double;
-    final fontWeight = _prefs.get(UserPreferences.subtitlesTextWeight) as int;
-    final offset = _prefs.get(UserPreferences.subtitlesOffsetPosition) as double;
+    final prefSize = _prefs.get(UserPreferences.subtitlesTextSize);
+    final fontWeight = _prefs.get(UserPreferences.subtitlesTextWeight);
+    final offset = _prefs.get(UserPreferences.subtitlesOffsetPosition);
 
     // Preference size is a scale factor (12-48, default 24 = 1x).
     // Mobile needs larger text due to smaller screens held closer.
