@@ -10,6 +10,7 @@ import 'package:server_core/server_core.dart';
 
 import '../../../data/models/aggregated_item.dart';
 import '../../../data/models/lyrics.dart';
+import '../../../data/repositories/item_mutation_repository.dart';
 import '../../../data/services/media_server_client_factory.dart';
 import '../../widgets/playback/lyrics_view.dart';
 
@@ -23,9 +24,12 @@ class AudioPlayerScreen extends StatefulWidget {
 class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
   final _manager = GetIt.instance<PlaybackManager>();
   final _clientFactory = GetIt.instance<MediaServerClientFactory>();
+  final _mutations = GetIt.instance<ItemMutationRepository>();
   final _subs = <StreamSubscription>[];
   bool _showQueue = false;
   bool _showLyrics = false;
+  bool? _localFavorite;
+  String? _favoriteItemId;
   LyricsData? _lyrics;
   String? _lyricsItemId;
 
@@ -56,6 +60,25 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
 
   void _rebuild() {
     if (mounted) setState(() {});
+  }
+
+  bool _getIsFavorite(AggregatedItem item) {
+    if (_favoriteItemId == item.id) return _localFavorite ?? item.isFavorite;
+    return item.isFavorite;
+  }
+
+  Future<void> _toggleFavorite(AggregatedItem item) async {
+    final current = _getIsFavorite(item);
+    final newVal = !current;
+    setState(() {
+      _favoriteItemId = item.id;
+      _localFavorite = newVal;
+    });
+    try {
+      await _mutations.setFavorite(item.id, isFavorite: newVal);
+    } catch (_) {
+      if (mounted) setState(() => _localFavorite = current);
+    }
   }
 
   @override
@@ -146,6 +169,8 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
                             )
                           : _buildNowPlaying(item, artUrl),
                 ),
+                if (item != null && !_showQueue && !_showLyrics)
+                  _buildFavoriteRow(item),
                 _buildProgressBar(),
                 _buildTransportControls(),
                 const SizedBox(height: AppSpacing.spaceLg),
@@ -199,73 +224,87 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
   }
 
   Widget _buildNowPlaying(AggregatedItem? item, String? artUrl) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2xl),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black45,
-                    blurRadius: 30,
-                    offset: Offset(0, 10),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxArtByWidth = (constraints.maxWidth - (AppSpacing.space2xl * 2))
+            .clamp(160.0, 560.0);
+        final maxArtByHeight = (constraints.maxHeight * 0.62)
+            .clamp(160.0, 560.0);
+        final artSize = maxArtByWidth < maxArtByHeight ? maxArtByWidth : maxArtByHeight;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space2xl),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: artSize,
+                  height: artSize,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black45,
+                          blurRadius: 30,
+                          offset: Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: artUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: artUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => _artPlaceholder(),
+                            errorWidget: (_, __, ___) => _artPlaceholder(),
+                          )
+                        : _artPlaceholder(),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.spaceXl),
+                Text(
+                  item?.name ?? '',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AppSpacing.spaceXs),
+                Text(
+                  _artistLine(item),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+                if (item?.album != null) ...[
+                  const SizedBox(height: AppSpacing.space2xs),
+                  Text(
+                    item!.album!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.5),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                   ),
                 ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: artUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: artUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => _artPlaceholder(),
-                      errorWidget: (_, __, ___) => _artPlaceholder(),
-                    )
-                  : _artPlaceholder(),
+              ],
             ),
           ),
-          const SizedBox(height: AppSpacing.spaceXl),
-          Text(
-            item?.name ?? '',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.spaceXs),
-          Text(
-            _artistLine(item),
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withValues(alpha: 0.7),
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
-          if (item?.album != null) ...[
-            const SizedBox(height: AppSpacing.space2xs),
-            Text(
-              item!.album!,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.5),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -290,6 +329,18 @@ class _AudioPlayerScreenState extends State<AudioPlayerScreen> {
     if (item.artists.isNotEmpty) return item.artists.join(', ');
     if (item.albumArtist != null) return item.albumArtist!;
     return '';
+  }
+
+  Widget _buildFavoriteRow(AggregatedItem item) {
+    final isFav = _getIsFavorite(item);
+    return IconButton(
+      icon: Icon(
+        isFav ? Icons.favorite : Icons.favorite_border,
+        size: 28,
+        color: isFav ? AppColorScheme.accent : Colors.white.withValues(alpha: 0.7),
+      ),
+      onPressed: () => _toggleFavorite(item),
+    );
   }
 
   Widget _buildProgressBar() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'di/providers.dart';
 import 'ui/navigation/app_router.dart';
@@ -19,13 +20,18 @@ class MoonfinApp extends StatelessWidget {
         routerConfig: appRouter,
         debugShowCheckedModeBanner: false,
         builder: (context, child) {
-          final location = appRouter.routerDelegate.currentConfiguration.uri.path;
-          final hidePlayer = location.startsWith('/player/video') ||
-              location.startsWith('/player/audio') ||
-              location == '/' ||
-              location == '/server-select' ||
-              location == '/server' ||
-              location == '/login';
+          var path = appRouter.routerDelegate.currentConfiguration.uri.path;
+          try {
+            path = GoRouterState.of(context).uri.path;
+          } catch (_) {}
+
+          final hidePlayer = path.startsWith('/player/') ||
+              path == '/live-tv/player' ||
+              path == '/' ||
+              path == '/server-select' ||
+              path == '/server' ||
+              path == '/login';
+
           return Column(
             children: [
               const OfflineBanner(),

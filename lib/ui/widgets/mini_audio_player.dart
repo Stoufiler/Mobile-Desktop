@@ -23,6 +23,7 @@ class _MiniAudioPlayerState extends State<MiniAudioPlayer> {
   final _manager = GetIt.instance<PlaybackManager>();
   final _clientFactory = GetIt.instance<MediaServerClientFactory>();
   final _subs = <StreamSubscription>[];
+  String? _dismissedItemId;
 
   PlayerState get _state => _manager.state;
   QueueService get _queue => _manager.queueService;
@@ -37,6 +38,10 @@ class _MiniAudioPlayerState extends State<MiniAudioPlayer> {
   }
 
   void _rebuild() {
+    final item = _currentItem;
+    if (item == null || item.id != _dismissedItemId) {
+      _dismissedItemId = null;
+    }
     if (mounted) setState(() {});
   }
 
@@ -77,6 +82,9 @@ class _MiniAudioPlayerState extends State<MiniAudioPlayer> {
     if (item == null || item.type != 'Audio') {
       return const SizedBox.shrink();
     }
+    if (_dismissedItemId == item.id) {
+      return const SizedBox.shrink();
+    }
 
     final isPlaying = _state.isPlaying;
     final artUrl = _artUrl(item);
@@ -86,7 +94,10 @@ class _MiniAudioPlayerState extends State<MiniAudioPlayer> {
     return Dismissible(
       key: ValueKey('mini-player-${item.id}'),
       direction: DismissDirection.horizontal,
-      onDismissed: (_) => _manager.stop(),
+      onDismissed: (_) {
+        setState(() => _dismissedItemId = item.id);
+        unawaited(_manager.stop());
+      },
       child: GestureDetector(
         onTap: () => appRouter.push(Destinations.audioPlayer),
         child: Container(
