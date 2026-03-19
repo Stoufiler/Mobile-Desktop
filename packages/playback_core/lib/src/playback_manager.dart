@@ -102,16 +102,23 @@ class PlaybackManager {
         DateTime.now().difference(_playbackStartTime!).inSeconds < 5) {
       return;
     }
-    // Detect premature transcode stream end.
-    final pos = _lastKnownPosition;
-    final dur = _backend?.duration ?? Duration.zero;
+    final pos = _lastKnownPosition > state.position
+        ? _lastKnownPosition
+        : state.position;
+    final backendDuration = _backend?.duration ?? Duration.zero;
     final effectiveDuration = _itemKnownDuration > Duration.zero
         ? _itemKnownDuration
-        : dur;
-    if (effectiveDuration > Duration.zero &&
-        pos < effectiveDuration - const Duration(minutes: 2)) {
+        : (backendDuration > Duration.zero ? backendDuration : state.duration);
+
+    if (effectiveDuration <= Duration.zero) {
       return;
     }
+
+    final remaining = effectiveDuration - pos;
+    if (remaining > const Duration(seconds: 5)) {
+      return;
+    }
+
     _isAutoNexting = true;
     _autoNext().whenComplete(() => _isAutoNexting = false);
   }
@@ -154,7 +161,9 @@ class PlaybackManager {
     bool enableDirectStream = true,
   }) async {
     final item = queueService.currentItem;
-    if (item == null || _backend == null) return;
+    if (item == null || _backend == null) {
+      return;
+    }
 
     _lastKnownPosition = Duration.zero;
 

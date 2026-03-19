@@ -174,8 +174,8 @@ Future<void> initAudioService({
     config: AudioServiceConfig(
       androidNotificationChannelId: 'com.moonfin.app.audio',
       androidNotificationChannelName: 'Music Playback',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
+      androidNotificationOngoing: false,
+      androidStopForegroundOnPause: false,
       notificationColor: const Color(0xFF1A1A2E),
       androidNotificationIcon: 'drawable/ic_notification',
     ),

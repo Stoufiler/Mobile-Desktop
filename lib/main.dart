@@ -1,3 +1,4 @@
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
@@ -33,6 +34,18 @@ void main() async {
     manager: GetIt.instance<PlaybackManager>(),
     clientFactory: GetIt.instance<MediaServerClientFactory>(),
   );
+
+  try {
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration(
+      avAudioSessionCategory: AVAudioSessionCategory.playback,
+      avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.duckOthers,
+      androidAudioAttributes: AndroidAudioAttributes(
+        contentType: AndroidAudioContentType.music,
+        usage: AndroidAudioUsage.media,
+      ),
+    ));
+  } catch (_) {}
 
   if (!GetIt.instance.isRegistered<PlaybackLifecycleHandler>()) {
     GetIt.instance.registerSingleton<PlaybackLifecycleHandler>(

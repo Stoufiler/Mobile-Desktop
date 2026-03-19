@@ -25,7 +25,7 @@ class MediaKitPlayerBackend implements PlayerBackend {
     );
     final platform = player.platform;
     if (platform is NativePlayer) {
-      platform.setProperty('network-timeout', '60');
+      platform.setProperty('network-timeout', '120');
     }
     final controller = VideoController(player);
     return MediaKitPlayerBackend._(player, controller, prefs);
