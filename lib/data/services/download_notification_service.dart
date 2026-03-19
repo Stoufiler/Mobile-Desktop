@@ -16,6 +16,7 @@ class DownloadNotificationService {
   bool _initialized = false;
   DateTime _lastUpdate = DateTime.fromMillisecondsSinceEpoch(0);
   bool _foregroundServiceRunning = false;
+  String? _lastProgressSignature;
 
   Future<void>? _pendingNotification;
 
@@ -60,15 +61,21 @@ class DownloadNotificationService {
   }) async {
     if (!_initialized) return;
 
-    final now = DateTime.now();
-    if (now.difference(_lastUpdate).inMilliseconds < 1000) return;
-    _lastUpdate = now;
-
     final percent = progress >= 0 ? (progress * 100).round() : -1;
     final batchInfo =
         batchTotal > 1 ? ' (${batchCompleted + 1}/$batchTotal)' : '';
     final title = 'Downloading$batchInfo';
     final body = percent >= 0 ? '$itemName — $percent%' : '$itemName…';
+    final signature = '$title\n$body\n$percent';
+
+    if (signature == _lastProgressSignature) {
+      return;
+    }
+
+    final now = DateTime.now();
+    if (now.difference(_lastUpdate).inMilliseconds < 1500) return;
+    _lastUpdate = now;
+    _lastProgressSignature = signature;
 
     final previous = _pendingNotification;
     final completer = Completer<void>();
@@ -93,6 +100,7 @@ class DownloadNotificationService {
     int batchTotal = 0,
   }) async {
     if (!_initialized) return;
+    _lastProgressSignature = null;
     await _stopForegroundService();
 
     final title = batchTotal > 1 ? 'Downloads complete' : 'Download complete';
@@ -107,12 +115,14 @@ class DownloadNotificationService {
     required String error,
   }) async {
     if (!_initialized) return;
+    _lastProgressSignature = null;
     await _stopForegroundService();
     await _showSimple(_completionNotificationId, 'Download failed', '$itemName: $error');
   }
 
   Future<void> dismiss() async {
     if (!_initialized) return;
+    _lastProgressSignature = null;
     await _stopForegroundService();
     await _plugin.cancel(_progressNotificationId);
   }

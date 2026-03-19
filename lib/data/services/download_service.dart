@@ -62,6 +62,22 @@ class DownloadService extends ChangeNotifier {
 
   UserPreferences get _prefs => GetIt.instance<UserPreferences>();
 
+  int _concurrencyLimit() {
+    return _prefs.get(UserPreferences.downloadConcurrentCount).clamp(1, 5);
+  }
+
+  int _inFlightDownloads() {
+    return _activeDownloads.values
+        .where((d) => !d.isComplete && d.error == null)
+        .length;
+  }
+
+  Future<void> _waitForDownloadSlot() async {
+    while (_inFlightDownloads() >= _concurrencyLimit()) {
+      await Future.delayed(const Duration(milliseconds: 120));
+    }
+  }
+
   Future<bool> _checkWifiPolicy() async {
     if (!_prefs.get(UserPreferences.downloadWifiOnly)) return true;
     final results = await Connectivity().checkConnectivity();
@@ -337,6 +353,61 @@ class DownloadService extends ChangeNotifier {
     return type == 'Movie' || type == 'Episode';
   }
 
+  Map<String, String> _buildAuthHeaders() {
+    final token = _client.accessToken;
+    if (token == null || token.isEmpty) {
+      return const {};
+    }
+
+    return {
+      'X-Emby-Token': token,
+      'Authorization': 'MediaBrowser Token="$token"',
+    };
+  }
+
+  bool _usesAudioDownloadEndpoint(AggregatedItem item) {
+    final mediaType = item.rawData['MediaType'] as String?;
+    return item.type == 'Audio' || item.type == 'AudioBook' || mediaType == 'Audio';
+  }
+
+  bool _shouldRetryBookDownload(AggregatedItem item, DioException error) {
+    if (item.type != 'Book') {
+      return false;
+    }
+
+    final status = error.response?.statusCode;
+    return status == 401 || status == 403 || status == 404;
+  }
+
+  List<String> _buildBookFallbackUrls(
+    AggregatedItem item, {
+    required String primaryUrl,
+  }) {
+    final primary = Uri.parse(primaryUrl).toString();
+    final urls = <String>[];
+    for (final uri in BookReaderService.buildDownloadUris(_client, item)) {
+      final value = uri.toString();
+      if (value != primary && !urls.contains(value)) {
+        urls.add(value);
+      }
+    }
+    return urls;
+  }
+
+  String _buildAudioDownloadUrl(String itemId, AggregatedItem item) {
+    final mediaSourceId =
+        item.mediaSources.isNotEmpty ? item.mediaSources.first['Id'] as String? : null;
+    final params = <String, String>{
+      'Static': 'true',
+      if (mediaSourceId != null) 'MediaSourceId': mediaSourceId,
+      if (_client.accessToken != null) 'api_key': _client.accessToken!,
+    };
+    final query = params.entries
+        .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+        .join('&');
+    return '${_client.baseUrl}/Audio/$itemId/stream?$query';
+  }
+
   String _buildDirectItemDownloadUrl(String itemId, AggregatedItem item) {
     final mediaSourceId =
         item.mediaSources.isNotEmpty ? item.mediaSources.first['Id'] as String? : null;
@@ -351,7 +422,11 @@ class DownloadService extends ChangeNotifier {
   }
 
   String _buildDownloadUrl(String itemId, AggregatedItem item, DownloadQuality quality) {
-    if (item.type == 'Audio' || item.type == 'AudioBook' || item.type == 'Book') {
+    if (_usesAudioDownloadEndpoint(item)) {
+      return _buildAudioDownloadUrl(itemId, item);
+    }
+
+    if (!quality.isTranscoded || !_supportsTranscodedDownload(item.type)) {
       return _buildDirectItemDownloadUrl(itemId, item);
     }
 
@@ -363,25 +438,21 @@ class DownloadService extends ChangeNotifier {
       if (_client.accessToken != null) 'api_key': _client.accessToken!,
     };
 
-    if (quality.isTranscoded && _supportsTranscodedDownload(item.type)) {
-      params['Static'] = 'false';
-      params['videoCodec'] = quality.videoCodec;
-      params['audioCodec'] = quality.audioCodec;
-      if (quality.videoBitRate != null) {
-        params['videoBitRate'] = quality.videoBitRate.toString();
-      }
-      if (quality.audioBitRate != null) {
-        params['audioBitRate'] = quality.audioBitRate.toString();
-      }
-      if (quality.maxWidth != null) {
-        params['maxWidth'] = quality.maxWidth.toString();
-      }
-      params['container'] = quality.container;
-      if (quality.audioChannels != null) {
-        params['audioChannels'] = quality.audioChannels.toString();
-      }
-    } else {
-      params['Static'] = 'true';
+    params['Static'] = 'false';
+    params['videoCodec'] = quality.videoCodec;
+    params['audioCodec'] = quality.audioCodec;
+    if (quality.videoBitRate != null) {
+      params['videoBitRate'] = quality.videoBitRate.toString();
+    }
+    if (quality.audioBitRate != null) {
+      params['audioBitRate'] = quality.audioBitRate.toString();
+    }
+    if (quality.maxWidth != null) {
+      params['maxWidth'] = quality.maxWidth.toString();
+    }
+    params['container'] = quality.container;
+    if (quality.audioChannels != null) {
+      params['audioChannels'] = quality.audioChannels.toString();
     }
 
     final query = params.entries.map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}').join('&');
@@ -396,6 +467,7 @@ class DownloadService extends ChangeNotifier {
 
   Future<void> downloadItem(AggregatedItem item, {DownloadQuality quality = DownloadQuality.original}) async {
     if (isDownloading(item.id)) return;
+    await _waitForDownloadSlot();
 
     String? savePath;
 
@@ -467,43 +539,76 @@ class DownloadService extends ChangeNotifier {
       notifyListeners();
 
       final url = _buildDownloadUrl(item.id, fullItem, quality);
-      await _downloadDio.download(
-        url,
-        savePath,
-        cancelToken: cancelToken,
-        deleteOnError: false,
-        onReceiveProgress: (received, total) {
-          final progress = _calculateProgress(
-            received: received,
-            total: total,
-            estimatedSize: estimatedSize,
-            quality: quality,
-          );
-          _activeDownloads[item.id] = DownloadProgress(
-            itemId: item.id,
-            fileName: fileName,
-            progress: progress,
-            bytesReceived: received,
-          );
-          _offlineRepo.updateDownloadStatus(
-            item.id,
-            item.serverId,
-            1,
-            progress: _storedProgress(progress),
-          );
-          _notificationService.showProgress(
-            itemName: item.name,
-            progress: progress,
-            batchTotal: _totalQueued,
-            batchCompleted: _completedCount,
-          );
-          notifyListeners();
-        },
-      );
+      final requestOptions = Options(headers: _buildAuthHeaders());
+
+      void onReceiveProgress(int received, int total) {
+        final progress = _calculateProgress(
+          received: received,
+          total: total,
+          estimatedSize: estimatedSize,
+          quality: quality,
+        );
+        _activeDownloads[item.id] = DownloadProgress(
+          itemId: item.id,
+          fileName: fileName,
+          progress: progress,
+          bytesReceived: received,
+        );
+        _offlineRepo.updateDownloadStatus(
+          item.id,
+          item.serverId,
+          1,
+          progress: _storedProgress(progress),
+        );
+        _notificationService.showProgress(
+          itemName: item.name,
+          progress: progress,
+          batchTotal: _totalQueued,
+          batchCompleted: _completedCount,
+        );
+        notifyListeners();
+      }
+
+      try {
+        await _downloadDio.download(
+          url,
+          savePath,
+          options: requestOptions,
+          cancelToken: cancelToken,
+          deleteOnError: false,
+          onReceiveProgress: onReceiveProgress,
+        );
+      } on DioException catch (e) {
+        if (!_shouldRetryBookDownload(fullItem, e)) {
+          rethrow;
+        }
+
+        var retrySucceeded = false;
+        final fallbackUrls = _buildBookFallbackUrls(fullItem, primaryUrl: url);
+        for (final fallbackUrl in fallbackUrls) {
+          try {
+            await _downloadDio.download(
+              fallbackUrl,
+              savePath,
+              options: requestOptions,
+              cancelToken: cancelToken,
+              deleteOnError: false,
+              onReceiveProgress: onReceiveProgress,
+            );
+            retrySucceeded = true;
+            break;
+          } on DioException {
+            continue;
+          }
+        }
+
+        if (!retrySucceeded) {
+          rethrow;
+        }
+      }
 
       final fileSize = await File(savePath).length();
       await _offlineRepo.setLocalFilePath(item.id, item.serverId, savePath, fileSize: fileSize);
-      await _downloadExternalSubtitles(fullItem, dir, fileName.replaceAll(RegExp(r'\.[^.]+$'), ''));
       await _offlineRepo.updateDownloadStatus(item.id, item.serverId, 2);
 
       if (Platform.isIOS) {
@@ -517,6 +622,7 @@ class DownloadService extends ChangeNotifier {
         isComplete: true,
       );
       _completedCount++;
+      notifyListeners();
 
       if (_totalQueued <= 1 || _completedCount >= _totalQueued) {
         await _notificationService.showComplete(
@@ -524,6 +630,8 @@ class DownloadService extends ChangeNotifier {
           batchTotal: _totalQueued > 1 ? _completedCount : 0,
         );
       }
+
+      await _downloadExternalSubtitles(fullItem, dir, fileName.replaceAll(RegExp(r'\.[^.]+$'), ''));
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
         _activeDownloads.remove(item.id);
@@ -569,7 +677,7 @@ class DownloadService extends ChangeNotifier {
     _completedCount = 0;
     notifyListeners();
 
-    final concurrency = _prefs.get(UserPreferences.downloadConcurrentCount).clamp(1, 5);
+    final concurrency = _concurrencyLimit();
     final queue = List<AggregatedItem>.from(items);
     final futures = <Future<void>>[];
 
@@ -713,13 +821,14 @@ class DownloadService extends ChangeNotifier {
       final itemDir = Directory('${imageDir.path}/${item.id}');
       if (!await itemDir.exists()) await itemDir.create(recursive: true);
 
+      final authOptions = Options(headers: _buildAuthHeaders());
       String? posterPath, backdropPath, logoPath;
 
       if (item.primaryImageTag != null) {
         final url = _client.imageApi.getPrimaryImageUrl(item.id, maxHeight: 500, tag: item.primaryImageTag);
         posterPath = '${itemDir.path}/poster.jpg';
         try {
-          await _downloadDio.download(url, posterPath);
+          await _downloadDio.download(url, posterPath, options: authOptions);
         } catch (_) {
           posterPath = null;
         }
@@ -729,7 +838,7 @@ class DownloadService extends ChangeNotifier {
         final url = _client.imageApi.getBackdropImageUrl(item.id, maxWidth: 1920, tag: item.backdropImageTags.first);
         backdropPath = '${itemDir.path}/backdrop.jpg';
         try {
-          await _downloadDio.download(url, backdropPath);
+          await _downloadDio.download(url, backdropPath, options: authOptions);
         } catch (_) {
           backdropPath = null;
         }
@@ -741,7 +850,7 @@ class DownloadService extends ChangeNotifier {
         );
         backdropPath = '${itemDir.path}/backdrop.jpg';
         try {
-          await _downloadDio.download(url, backdropPath);
+          await _downloadDio.download(url, backdropPath, options: authOptions);
         } catch (_) {
           backdropPath = null;
         }
@@ -751,7 +860,7 @@ class DownloadService extends ChangeNotifier {
         final url = _client.imageApi.getLogoImageUrl(item.id, maxWidth: 500, tag: item.logoImageTag);
         logoPath = '${itemDir.path}/logo.png';
         try {
-          await _downloadDio.download(url, logoPath);
+          await _downloadDio.download(url, logoPath, options: authOptions);
         } catch (_) {
           logoPath = null;
         }
@@ -816,6 +925,7 @@ class DownloadService extends ChangeNotifier {
   Future<void> _downloadExternalSubtitles(AggregatedItem item, Directory dir, String fileNameBase) async {
     final mediaSources = item.mediaSources;
     if (mediaSources.isEmpty) return;
+    final authOptions = Options(headers: _buildAuthHeaders());
     final streams = (mediaSources.first['MediaStreams'] as List?) ?? [];
     for (final stream in streams) {
       if (stream is! Map<String, dynamic>) continue;
@@ -830,7 +940,7 @@ class DownloadService extends ChangeNotifier {
       final subPath = '${dir.path}/${fileNameBase}_sub_$index.$codec';
       final subUrl = '${_client.baseUrl}$deliveryUrl';
       try {
-        await _downloadDio.download(subUrl, subPath);
+        await _downloadDio.download(subUrl, subPath, options: authOptions);
       } catch (_) {}
     }
   }

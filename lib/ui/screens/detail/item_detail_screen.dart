@@ -1917,6 +1917,12 @@ class _DownloadButton extends StatelessWidget {
   void _showQualityPicker(BuildContext context, DownloadService service) {
     final isMulti = item.type == 'Season' || item.type == 'Series';
     final supportsTranscoding = item.type == 'Movie' || item.type == 'Episode';
+
+    if (!isMulti && !supportsTranscoding) {
+      _startDownload(context, service, DownloadQuality.original);
+      return;
+    }
+
     final sourceWidth = isMulti ? null : item.sourceVideoWidth;
     final availableQualities =
         supportsTranscoding
