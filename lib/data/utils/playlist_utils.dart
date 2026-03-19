@@ -57,9 +57,6 @@ Future<bool> playlistContainsOnlyMediaType(
   }
 
   final summaryMediaType = item.rawData['MediaType'] as String?;
-  if (summaryMediaType != null && summaryMediaType != mediaType) {
-    return false;
-  }
 
   try {
     final response = await client.itemsApi.getPlaylistItems(item.id);
@@ -90,10 +87,7 @@ Future<bool> playlistHasBrowsableItems(
   }
 
   final summaryMediaType = item.rawData['MediaType'] as String?;
-  if (summaryMediaType == 'Audio') {
-    return false;
-  }
-  if (summaryMediaType != null) {
+  if (summaryMediaType != null && summaryMediaType != 'Audio') {
     return true;
   }
 

@@ -242,16 +242,16 @@ class MultiServerRepository {
             limit: limit,
             fields: _fields,
           );
-          return _parseItems(response, session.server.id);
+          return filterBrowsablePlaylists(
+            session.client,
+            _parseItems(response, session.server.id),
+          );
         }, label: 'playlists from ${session.server.name}'),
       ),
     );
 
-    final all =
-        results.expand((e) => e).where((item) {
-            return isPlaylistNonEmpty(item) && !isAudioPlaylistSummary(item);
-          }).toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
+    final all = results.expand((e) => e).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     return HomeRow(
       id: 'playlists',
