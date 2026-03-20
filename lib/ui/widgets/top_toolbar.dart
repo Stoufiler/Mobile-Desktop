@@ -466,11 +466,14 @@ class _LibrariesDropdown extends StatefulWidget {
 }
 
 class _LibrariesDropdownState extends State<_LibrariesDropdown> {
+  final _targetKey = GlobalKey();
   final _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   bool _buttonHovered = false;
   bool _dropdownHovered = false;
   Timer? _hideTimer;
+  bool _openToLeft = false;
+  double _menuWidth = 220;
 
   @override
   void dispose() {
@@ -487,6 +490,19 @@ class _LibrariesDropdownState extends State<_LibrariesDropdown> {
   void _showDropdown() {
     _hideTimer?.cancel();
     if (_overlayEntry != null) return;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    _menuWidth = (screenWidth - 16).clamp(180.0, 280.0);
+
+    final targetBox = _targetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (targetBox != null) {
+      final targetLeft = targetBox.localToGlobal(Offset.zero).dx;
+      final wouldOverflowRight = targetLeft + _menuWidth > screenWidth - 8;
+      _openToLeft = wouldOverflowRight;
+    } else {
+      _openToLeft = false;
+    }
+
     _overlayEntry = OverlayEntry(builder: _buildOverlay);
     Overlay.of(context).insert(_overlayEntry!);
     setState(() {});
@@ -509,11 +525,11 @@ class _LibrariesDropdownState extends State<_LibrariesDropdown> {
   Widget _buildOverlay(BuildContext context) {
     return CompositedTransformFollower(
       link: _layerLink,
-      targetAnchor: Alignment.bottomLeft,
-      followerAnchor: Alignment.topLeft,
+      targetAnchor: _openToLeft ? Alignment.bottomRight : Alignment.bottomLeft,
+      followerAnchor: _openToLeft ? Alignment.topRight : Alignment.topLeft,
       offset: Offset.zero,
       child: Align(
-        alignment: Alignment.topLeft,
+        alignment: _openToLeft ? Alignment.topRight : Alignment.topLeft,
         child: MouseRegion(
           onEnter: (_) {
             _dropdownHovered = true;
@@ -530,7 +546,10 @@ class _LibrariesDropdownState extends State<_LibrariesDropdown> {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 180),
+                  constraints: BoxConstraints(
+                    minWidth: 180,
+                    maxWidth: _menuWidth,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(12),
@@ -570,6 +589,7 @@ class _LibrariesDropdownState extends State<_LibrariesDropdown> {
   @override
   Widget build(BuildContext context) {
     return CompositedTransformTarget(
+      key: _targetKey,
       link: _layerLink,
       child: MouseRegion(
         onEnter: (_) {
