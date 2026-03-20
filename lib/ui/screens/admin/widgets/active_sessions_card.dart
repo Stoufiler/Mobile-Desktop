@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:server_core/server_core.dart';
 
+import '../../../../data/services/socket_handler.dart';
 import 'session_detail_sheet.dart';
 
 class ActiveSessionsCard extends StatefulWidget {
@@ -20,6 +21,7 @@ class _ActiveSessionsCardState extends State<ActiveSessionsCard> {
   bool _fetching = false;
   String? _error;
   Timer? _timer;
+  StreamSubscription<ServerWebSocketMessage>? _socketSubscription;
 
   @override
   void initState() {
@@ -27,10 +29,25 @@ class _ActiveSessionsCardState extends State<ActiveSessionsCard> {
     _sessionApi = GetIt.instance<MediaServerClient>().sessionApi;
     _load();
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => _load());
+    _socketSubscription = GetIt.instance<SocketHandler>().events.listen((event) {
+      switch (event) {
+        case SessionEndedMessage():
+        case PlayMessage():
+        case PlaystateMessage():
+        case GeneralCommandMessage():
+          _load();
+        case ServerEventMessage(:final type)
+            when type == 'SessionsStart' || type == 'SessionsStop':
+          _load();
+        default:
+          break;
+      }
+    });
   }
 
   @override
   void dispose() {
+    _socketSubscription?.cancel();
     _timer?.cancel();
     super.dispose();
   }

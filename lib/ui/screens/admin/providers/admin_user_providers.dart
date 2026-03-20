@@ -49,3 +49,8 @@ final adminRepositoriesProvider =
   final client = GetIt.instance<MediaServerClient>();
   return client.adminPluginsApi.getRepositories();
 });
+
+final adminDevicesProvider = FutureProvider<List<DeviceInfoDto>>((ref) async {
+  final client = GetIt.instance<MediaServerClient>();
+  return client.adminDevicesApi.getDevices();
+});

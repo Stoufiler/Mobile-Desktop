@@ -20,6 +20,7 @@ class _AdminPluginsScreenState extends ConsumerState<AdminPluginsScreen>
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String? _categoryFilter;
+  _InstalledPluginFilter _installedFilter = _InstalledPluginFilter.all;
 
   AdminPluginsApi get _api =>
       GetIt.instance<MediaServerClient>().adminPluginsApi;
@@ -86,6 +87,8 @@ class _AdminPluginsScreenState extends ConsumerState<AdminPluginsScreen>
             children: [
               _InstalledTab(
                 searchQuery: _searchQuery,
+                statusFilter: _installedFilter,
+                onStatusChanged: (filter) => setState(() => _installedFilter = filter),
                 onToggle: _togglePlugin,
                 onUninstall: _uninstallPlugin,
               ),
@@ -179,13 +182,19 @@ class _AdminPluginsScreenState extends ConsumerState<AdminPluginsScreen>
   }
 }
 
+enum _InstalledPluginFilter { all, active, disabled, restart, problem }
+
 class _InstalledTab extends ConsumerWidget {
   final String searchQuery;
+  final _InstalledPluginFilter statusFilter;
+  final ValueChanged<_InstalledPluginFilter> onStatusChanged;
   final Future<void> Function(PluginInfo) onToggle;
   final Future<void> Function(PluginInfo) onUninstall;
 
   const _InstalledTab({
     required this.searchQuery,
+    required this.statusFilter,
+    required this.onStatusChanged,
     required this.onToggle,
     required this.onUninstall,
   });
@@ -211,6 +220,21 @@ class _InstalledTab extends ConsumerWidget {
       ),
       data: (plugins) {
         var filtered = plugins;
+        filtered = filtered.where((plugin) {
+          switch (statusFilter) {
+            case _InstalledPluginFilter.all:
+              return true;
+            case _InstalledPluginFilter.active:
+              return plugin.status == PluginStatus.active;
+            case _InstalledPluginFilter.disabled:
+              return plugin.status == PluginStatus.disabled;
+            case _InstalledPluginFilter.restart:
+              return plugin.status == PluginStatus.restart;
+            case _InstalledPluginFilter.problem:
+              return plugin.status == PluginStatus.malfunctioned ||
+                  plugin.status == PluginStatus.notSupported;
+          }
+        }).toList();
         if (searchQuery.isNotEmpty) {
           final q = searchQuery.toLowerCase();
           filtered = filtered
@@ -228,21 +252,85 @@ class _InstalledTab extends ConsumerWidget {
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 80),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) {
-            final plugin = filtered[index];
-            return _InstalledPluginTile(
-              plugin: plugin,
-              onTap: () =>
-                  context.push(Destinations.adminPlugin(plugin.id)),
-              onToggle: () => onToggle(plugin),
-              onUninstall: () => onUninstall(plugin),
-            );
-          },
+        return Column(
+          children: [
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                children: [
+                  _InstalledFilterChip(
+                    label: 'All',
+                    selected: statusFilter == _InstalledPluginFilter.all,
+                    onTap: () => onStatusChanged(_InstalledPluginFilter.all),
+                  ),
+                  _InstalledFilterChip(
+                    label: 'Active',
+                    selected: statusFilter == _InstalledPluginFilter.active,
+                    onTap: () => onStatusChanged(_InstalledPluginFilter.active),
+                  ),
+                  _InstalledFilterChip(
+                    label: 'Disabled',
+                    selected: statusFilter == _InstalledPluginFilter.disabled,
+                    onTap: () => onStatusChanged(_InstalledPluginFilter.disabled),
+                  ),
+                  _InstalledFilterChip(
+                    label: 'Restart',
+                    selected: statusFilter == _InstalledPluginFilter.restart,
+                    onTap: () => onStatusChanged(_InstalledPluginFilter.restart),
+                  ),
+                  _InstalledFilterChip(
+                    label: 'Issues',
+                    selected: statusFilter == _InstalledPluginFilter.problem,
+                    onTap: () => onStatusChanged(_InstalledPluginFilter.problem),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.only(bottom: 80),
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final plugin = filtered[index];
+                  return _InstalledPluginTile(
+                    plugin: plugin,
+                    onTap: () =>
+                        context.push(Destinations.adminPlugin(plugin.id)),
+                    onToggle: () => onToggle(plugin),
+                    onUninstall: () => onUninstall(plugin),
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _InstalledFilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _InstalledFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+      ),
     );
   }
 }

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:server_core/server_core.dart';
+
+import '../../../../data/services/socket_handler.dart';
 
 enum _ActivityFilter { all, user, system }
 
@@ -15,10 +19,12 @@ class _AdminActivityScreenState extends State<AdminActivityScreen> {
   final List<ActivityLogEntry> _entries = [];
   final ScrollController _scrollController = ScrollController();
   _ActivityFilter _filter = _ActivityFilter.all;
+  DateTimeRange? _dateRange;
   bool _isLoading = false;
   bool _hasMore = true;
   int _totalCount = 0;
   String? _error;
+  StreamSubscription<ServerWebSocketMessage>? _socketSubscription;
 
   static const _pageSize = 30;
 
@@ -29,11 +35,20 @@ class _AdminActivityScreenState extends State<AdminActivityScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _socketSubscription = GetIt.instance<SocketHandler>().events.listen((event) {
+      switch (event) {
+        case ServerEventMessage(:final type) when type == 'ActivityLogEntry':
+          _refresh();
+        default:
+          break;
+      }
+    });
     _loadPage();
   }
 
   @override
   void dispose() {
+    _socketSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -96,6 +111,20 @@ class _AdminActivityScreenState extends State<AdminActivityScreen> {
     await _loadPage();
   }
 
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: _dateRange,
+    );
+    if (picked == null) {
+      return;
+    }
+    setState(() => _dateRange = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -104,20 +133,34 @@ class _AdminActivityScreenState extends State<AdminActivityScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Row(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              ..._ActivityFilter.values.map((f) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      selected: _filter == f,
-                      label: Text(_filterLabel(f)),
-                      onSelected: (_) => _changeFilter(f),
-                    ),
+              ..._ActivityFilter.values.map((f) => FilterChip(
+                    selected: _filter == f,
+                    label: Text(_filterLabel(f)),
+                    onSelected: (_) => _changeFilter(f),
                   )),
-              const Spacer(),
+              FilterChip(
+                selected: _dateRange != null,
+                label: Text(_dateRange == null
+                    ? 'Date range'
+                    : '${_dateRange!.start.month}/${_dateRange!.start.day} - ${_dateRange!.end.month}/${_dateRange!.end.day}'),
+                onSelected: (_) => _pickDateRange(),
+              ),
+              if (_dateRange != null)
+                ActionChip(
+                  label: const Text('Clear dates'),
+                  onPressed: () => setState(() => _dateRange = null),
+                ),
               if (_totalCount > 0)
-                Text('${_entries.length} of $_totalCount',
-                    style: theme.textTheme.bodySmall),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text('${_entries.length} of $_totalCount',
+                      style: theme.textTheme.bodySmall),
+                ),
             ],
           ),
         ),
@@ -128,6 +171,16 @@ class _AdminActivityScreenState extends State<AdminActivityScreen> {
   }
 
   Widget _buildBody(ThemeData theme) {
+    final visibleEntries = _entries.where((entry) {
+      if (_dateRange == null) {
+        return true;
+      }
+      final localDate = entry.date.toLocal();
+      final rangeStart = DateTime(_dateRange!.start.year, _dateRange!.start.month, _dateRange!.start.day);
+      final rangeEnd = DateTime(_dateRange!.end.year, _dateRange!.end.month, _dateRange!.end.day, 23, 59, 59);
+      return !localDate.isBefore(rangeStart) && !localDate.isAfter(rangeEnd);
+    }).toList();
+
     if (_entries.isEmpty && _isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -148,7 +201,7 @@ class _AdminActivityScreenState extends State<AdminActivityScreen> {
       );
     }
 
-    if (_entries.isEmpty) {
+    if (visibleEntries.isEmpty) {
       return const Center(child: Text('No activity entries'));
     }
 
@@ -157,15 +210,15 @@ class _AdminActivityScreenState extends State<AdminActivityScreen> {
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.only(bottom: 16),
-        itemCount: _entries.length + (_hasMore ? 1 : 0),
+        itemCount: visibleEntries.length + (_hasMore ? 1 : 0),
         itemBuilder: (context, index) {
-          if (index >= _entries.length) {
+          if (index >= visibleEntries.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          return _ActivityTile(entry: _entries[index]);
+          return _ActivityTile(entry: visibleEntries[index]);
         },
       ),
     );

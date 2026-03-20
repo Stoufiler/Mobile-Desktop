@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../navigation/destinations.dart';
+import 'providers/admin_websocket_handler.dart';
 import 'widgets/admin_drawer.dart';
 
 class AdminShellScreen extends StatelessWidget {
@@ -15,7 +16,8 @@ class AdminShellScreen extends StatelessWidget {
     final currentPath = GoRouterState.of(context).uri.path;
     final canGoBack = !isWide && _isSubPage(currentPath);
 
-    return Scaffold(
+    return AdminWebSocketHandler(
+      child: Scaffold(
       appBar: AppBar(
         leading: isWide
             ? null
@@ -55,7 +57,7 @@ class AdminShellScreen extends StatelessWidget {
               ],
             )
           : child,
-    );
+    ));
   }
 
   static const _topLevelPaths = {

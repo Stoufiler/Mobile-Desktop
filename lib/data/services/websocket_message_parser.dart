@@ -16,6 +16,10 @@ class WebSocketMessageParser {
     final type = json['MessageType'] as String?;
     final data = json['Data'];
 
+    if (type == null) {
+      return null;
+    }
+
     return switch (type) {
       'LibraryChanged' => _parseLibraryChanged(data),
       'UserDataChanged' => _parseUserDataChanged(data),
@@ -26,6 +30,21 @@ class WebSocketMessageParser {
       'ServerShuttingDown' => const ServerShuttingDownMessage(),
       'SessionEnded' => _parseSessionEnded(data),
       'ScheduledTaskEnded' => _parseScheduledTaskEnded(data),
+      'SessionsStart' ||
+      'SessionsStop' ||
+      'ScheduledTasksInfoStart' ||
+      'ScheduledTasksInfoStop' ||
+      'PackageInstallationCompleted' ||
+      'PackageInstallationFailed' ||
+      'PluginInstalled' ||
+      'PluginUninstalled' ||
+      'UserCreated' ||
+      'UserDeleted' ||
+      'UserUpdated' ||
+      'ActivityLogEntry' => ServerEventMessage(
+          type: type,
+          data: data is Map<String, dynamic> ? data : const {},
+        ),
       _ => null,
     };
   }

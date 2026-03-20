@@ -80,3 +80,13 @@ class ScheduledTaskEndedMessage extends ServerWebSocketMessage {
     required this.status,
   });
 }
+
+class ServerEventMessage extends ServerWebSocketMessage {
+  final String type;
+  final Map<String, dynamic> data;
+
+  const ServerEventMessage({
+    required this.type,
+    this.data = const {},
+  });
+}

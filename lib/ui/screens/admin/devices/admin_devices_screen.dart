@@ -3,10 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get_it/get_it.dart';
 import 'package:server_core/server_core.dart';
 
-final adminDevicesProvider = FutureProvider<List<DeviceInfoDto>>((ref) async {
-  final client = GetIt.instance<MediaServerClient>();
-  return client.adminDevicesApi.getDevices();
-});
+import '../providers/admin_user_providers.dart';
 
 class AdminDevicesScreen extends ConsumerStatefulWidget {
   const AdminDevicesScreen({super.key});
@@ -16,7 +13,17 @@ class AdminDevicesScreen extends ConsumerStatefulWidget {
 }
 
 class _AdminDevicesScreenState extends ConsumerState<AdminDevicesScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String? _userFilter;
+
   AdminDevicesApi get _api => GetIt.instance<MediaServerClient>().adminDevicesApi;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _editDeviceName(DeviceInfoDto device) async {
     final controller = TextEditingController(text: device.displayName);
@@ -146,13 +153,89 @@ class _AdminDevicesScreenState extends ConsumerState<AdminDevicesScreen> {
           ],
         ),
       ),
-      data: (devices) => devices.isEmpty
-          ? const Center(child: Text('No devices found'))
+      data: (devices) {
+        final users = devices
+            .map((device) => device.lastUserName)
+            .whereType<String>()
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+
+        final filtered = devices.where((device) {
+          if (_userFilter != null && device.lastUserName != _userFilter) {
+            return false;
+          }
+          if (_searchQuery.isEmpty) {
+            return true;
+          }
+          final query = _searchQuery.toLowerCase();
+          return device.displayName.toLowerCase().contains(query) ||
+              (device.appName ?? '').toLowerCase().contains(query) ||
+              (device.lastUserName ?? '').toLowerCase().contains(query);
+        }).toList();
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) => setState(() => _searchQuery = value.trim()),
+                      decoration: InputDecoration(
+                        hintText: 'Search devices',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchQuery.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                                icon: const Icon(Icons.clear),
+                              ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  DropdownButton<String?>(
+                    value: _userFilter,
+                    hint: const Text('User'),
+                    onChanged: (value) => setState(() => _userFilter = value),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('All users'),
+                      ),
+                      ...users.map(
+                        (user) => DropdownMenuItem<String?>(
+                          value: user,
+                          child: Text(user),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: filtered.isEmpty
+          ? Center(
+              child: Text(
+                devices.isEmpty ? 'No devices found' : 'No devices match the current filters',
+              ),
+            )
           : ListView.builder(
               padding: const EdgeInsets.all(8),
-              itemCount: devices.length,
+              itemCount: filtered.length,
               itemBuilder: (context, index) {
-                final device = devices[index];
+                final device = filtered[index];
                 final isCurrentDevice = device.id == currentDeviceId;
                 final appInfo = [device.appName, device.appVersion]
                     .where((v) => v != null && v.isNotEmpty)
@@ -224,6 +307,10 @@ class _AdminDevicesScreenState extends ConsumerState<AdminDevicesScreen> {
                 );
               },
             ),
+            ),
+          ],
+        );
+      },
     );
   }
 

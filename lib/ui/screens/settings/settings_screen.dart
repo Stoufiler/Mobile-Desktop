@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../auth/repositories/session_repository.dart';
 import '../../../di/providers.dart';
 import '../../navigation/destinations.dart';
+import '../admin/providers/admin_status_providers.dart';
 import '../../../util/platform_detection.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -19,6 +20,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
+    final adminBadgeCount = isAdmin
+        ? ref.watch(adminNotificationSummaryProvider).valueOrNull?.count ?? 0
+        : 0;
     final theme = Theme.of(context);
     final accountEntries = <_SettingsEntry>[
       _SettingsEntry(
@@ -147,6 +151,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           title: 'Administration',
           subtitle: 'Server settings, users, libraries',
           entries: const [],
+          badgeCount: adminBadgeCount,
           onTap: () => context.push(Destinations.admin),
         ),
       _SettingsSectionData(
@@ -276,6 +281,7 @@ class _SettingsSectionData {
   final String subtitle;
   final List<_SettingsEntry> entries;
   final VoidCallback? onTap;
+  final int badgeCount;
 
   const _SettingsSectionData({
     required this.icon,
@@ -283,6 +289,7 @@ class _SettingsSectionData {
     required this.subtitle,
     required this.entries,
     this.onTap,
+    this.badgeCount = 0,
   });
 }
 
@@ -322,7 +329,31 @@ class _SettingsSectionCard extends StatelessWidget {
                   color: theme.colorScheme.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(section.icon, size: 22),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Center(child: Icon(section.icon, size: 22)),
+                    if (section.badgeCount > 0)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.error,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            section.badgeCount > 9 ? '9+' : '${section.badgeCount}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onError,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               Text(

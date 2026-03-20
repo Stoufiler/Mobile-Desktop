@@ -8,11 +8,25 @@ import '../../../navigation/destinations.dart';
 import '../providers/admin_user_providers.dart';
 import 'admin_user_delete_dialog.dart';
 
-class AdminUsersScreen extends ConsumerWidget {
+class AdminUsersScreen extends ConsumerStatefulWidget {
   const AdminUsersScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminUsersScreen> createState() => _AdminUsersScreenState();
+}
+
+class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final usersAsync = ref.watch(adminUsersListProvider);
     final client = GetIt.instance<MediaServerClient>();
 
@@ -34,15 +48,54 @@ class AdminUsersScreen extends ConsumerWidget {
           ],
         ),
       ),
-      data: (users) => Stack(
+      data: (users) {
+        final filtered = users.where((user) {
+          if (_searchQuery.isEmpty) {
+            return true;
+          }
+          final query = _searchQuery.toLowerCase();
+          return (user.name ?? '').toLowerCase().contains(query);
+        }).toList();
+
+        return Stack(
         children: [
-          users.isEmpty
-            ? const Center(child: Text('No users found'))
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _searchQuery = value.trim()),
+                  decoration: InputDecoration(
+                    hintText: 'Search users',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                            icon: const Icon(Icons.clear),
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: filtered.isEmpty
+            ? Center(
+                child: Text(
+                  users.isEmpty ? 'No users found' : 'No users match your search',
+                ),
+              )
             : ListView.builder(
                 padding: const EdgeInsets.all(8),
-                itemCount: users.length,
+                itemCount: filtered.length,
                 itemBuilder: (context, index) {
-                  final user = users[index];
+                  final user = filtered[index];
                   final isAdmin =
                       user.policy?.isAdministrator ?? false;
                   final isDisabled = user.policy?.isDisabled ?? false;
@@ -136,6 +189,9 @@ class AdminUsersScreen extends ConsumerWidget {
                   );
                 },
               ),
+              ),
+            ],
+          ),
           Positioned(
             right: 16,
             bottom: 16,
@@ -146,7 +202,8 @@ class AdminUsersScreen extends ConsumerWidget {
             ),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 }

@@ -18,6 +18,7 @@ class AdminTasksScreen extends ConsumerStatefulWidget {
 
 class _AdminTasksScreenState extends ConsumerState<AdminTasksScreen> {
   Timer? _refreshTimer;
+  String? _categoryFilter;
 
   AdminTasksApi get _api =>
       GetIt.instance<MediaServerClient>().adminTasksApi;
@@ -62,26 +63,66 @@ class _AdminTasksScreenState extends ConsumerState<AdminTasksScreen> {
           grouped.putIfAbsent(category, () => []).add(task);
         }
         final categories = grouped.keys.toList()..sort();
+        final visibleCategories = _categoryFilter == null
+            ? categories
+            : categories.where((category) => category == _categoryFilter).toList();
 
         if (categories.isEmpty) {
           return const Center(child: Text('No scheduled tasks found'));
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 80),
-          itemCount: categories.length,
-          itemBuilder: (context, index) {
-            final category = categories[index];
-            final categoryTasks = grouped[category]!;
-            return _CategorySection(
-              category: category,
-              tasks: categoryTasks,
-              onStart: _startTask,
-              onStop: _stopTask,
-              onTap: (task) =>
-                  context.push(Destinations.adminTask(task.id)),
-            );
-          },
+        return Column(
+          children: [
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: const Text('All'),
+                      selected: _categoryFilter == null,
+                      onSelected: (_) => setState(() => _categoryFilter = null),
+                    ),
+                  ),
+                  ...categories.map(
+                    (category) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(category),
+                        selected: _categoryFilter == category,
+                        onSelected: (_) => setState(() {
+                          _categoryFilter = _categoryFilter == category ? null : category;
+                        }),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: visibleCategories.isEmpty
+                  ? const Center(child: Text('No tasks match the current filter'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      itemCount: visibleCategories.length,
+                      itemBuilder: (context, index) {
+                        final category = visibleCategories[index];
+                        final categoryTasks = grouped[category]!;
+                        return _CategorySection(
+                          category: category,
+                          tasks: categoryTasks,
+                          onStart: _startTask,
+                          onStop: _stopTask,
+                          onTap: (task) =>
+                              context.push(Destinations.adminTask(task.id)),
+                        );
+                      },
+                    ),
+            ),
+          ],
         );
       },
     );
