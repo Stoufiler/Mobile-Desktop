@@ -8,128 +8,401 @@ import '../../../di/providers.dart';
 import '../../navigation/destinations.dart';
 import '../../../util/platform_detection.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  @override
+  Widget build(BuildContext context) {
     final isAdmin = ref.watch(isAdminProvider);
+    final theme = Theme.of(context);
+    final accountEntries = <_SettingsEntry>[
+      _SettingsEntry(
+        icon: Icons.manage_accounts,
+        title: 'Authentication',
+        subtitle: 'Auto login, server management',
+        onTap: () => context.push(Destinations.settingsAuth),
+      ),
+      _SettingsEntry(
+        icon: Icons.pin,
+        title: 'PIN Code',
+        subtitle: 'Set up PIN code protection',
+        onTap: () => context.push(Destinations.settingsPinCode),
+      ),
+      _SettingsEntry(
+        icon: Icons.child_care,
+        title: 'Parental Controls',
+        subtitle: 'Content rating restrictions',
+        onTap: () => context.push(Destinations.settingsParental),
+      ),
+    ];
+
+    final customizationEntries = <_SettingsEntry>[
+      _SettingsEntry(
+        icon: Icons.palette,
+        title: 'Theme & Appearance',
+        subtitle: PlatformDetection.isMobile
+            ? 'Watched indicators, backdrops'
+            : 'Focus color, watched indicators, backdrops',
+        onTap: () => context.push(Destinations.settingsAppearance),
+      ),
+      _SettingsEntry(
+        icon: Icons.view_sidebar,
+        title: 'Navigation',
+        subtitle: 'Navbar style, toolbar buttons',
+        onTap: () => context.push(Destinations.settingsNavigation),
+      ),
+      _SettingsEntry(
+        icon: Icons.home,
+        title: 'Home Sections',
+        subtitle: 'Reorder and toggle home rows',
+        onTap: () => context.push(Destinations.settingsHomeSections),
+      ),
+      _SettingsEntry(
+        icon: Icons.featured_play_list,
+        title: 'Media Bar',
+        subtitle: 'Featured content, appearance, trailers',
+        onTap: () => context.push(Destinations.settingsMediaBar),
+      ),
+      _SettingsEntry(
+        icon: Icons.photo_library,
+        title: 'Library Display',
+        subtitle: 'Poster size, image type, folder view',
+        onTap: () => context.push(Destinations.settingsLibrary),
+      ),
+    ];
+
+    final playbackEntries = <_SettingsEntry>[
+      _SettingsEntry(
+        icon: Icons.play_circle_fill,
+        title: 'Playback',
+        subtitle: 'Bitrate, resolution, behavior',
+        onTap: () => context.push(Destinations.settingsPlayback),
+      ),
+      _SettingsEntry(
+        icon: Icons.subtitles,
+        title: 'Subtitles',
+        subtitle: 'Language, size, appearance',
+        onTap: () => context.push(Destinations.settingsSubtitles),
+      ),
+      _SettingsEntry(
+        icon: Icons.download,
+        title: 'Downloads',
+        subtitle: 'Quality, storage, WiFi-only',
+        onTap: () => context.push(Destinations.settingsDownloads),
+      ),
+    ];
+
+    final moonfinEntries = <_SettingsEntry>[
+      _SettingsEntry(
+        icon: Icons.rocket_launch,
+        title: 'Moonfin Settings',
+        subtitle: 'Plugin sync, theme music, ratings',
+        onTap: () => context.push(Destinations.settingsMoonfin),
+      ),
+      _SettingsEntry(
+        icon: Icons.movie_filter,
+        title: 'Seerr',
+        subtitle: 'Media request integration',
+        onTap: () => context.push(Destinations.settingsSeerr),
+      ),
+    ];
+
+    final otherEntries = <_SettingsEntry>[
+      _SettingsEntry(
+        icon: Icons.swap_horiz,
+        title: 'Switch Server',
+        onTap: () => context.go(Destinations.serverSelect),
+      ),
+      _SettingsEntry(
+        icon: Icons.logout,
+        title: 'Sign Out',
+        onTap: () async {
+          await GetIt.instance<SessionRepository>().destroyCurrentSession();
+          if (context.mounted) context.go(Destinations.serverSelect);
+        },
+      ),
+      _SettingsEntry(
+        icon: Icons.info,
+        title: 'About',
+        subtitle: 'Version, licenses',
+        onTap: () => context.push(Destinations.settingsAbout),
+      ),
+    ];
+
+    final sections = <_SettingsSectionData>[
+      _SettingsSectionData(
+        icon: Icons.manage_accounts,
+        title: 'Account',
+        subtitle: 'Sign-in and security',
+        entries: accountEntries,
+      ),
+      if (isAdmin)
+        _SettingsSectionData(
+          icon: Icons.admin_panel_settings,
+          title: 'Administration',
+          subtitle: 'Server settings, users, libraries',
+          entries: const [],
+          onTap: () => context.push(Destinations.admin),
+        ),
+      _SettingsSectionData(
+        icon: Icons.brush,
+        title: 'Customization',
+        subtitle: 'Theme and layout',
+        entries: customizationEntries,
+      ),
+      _SettingsSectionData(
+        icon: Icons.play_circle,
+        title: 'Playback',
+        subtitle: 'Video and subtitles',
+        entries: playbackEntries,
+      ),
+      _SettingsSectionData(
+        icon: Icons.rocket_launch,
+        title: 'Moonfin',
+        subtitle: 'Integrations',
+        entries: moonfinEntries,
+      ),
+    ];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
         children: [
-          const _SettingsSection(title: 'Account'),
-          ListTile(
-            leading: const Icon(Icons.lock),
-            title: const Text('Authentication'),
-            subtitle: const Text('Auto login, server management'),
-            onTap: () => context.push(Destinations.settingsAuth),
-          ),
-          ListTile(
-            leading: const Icon(Icons.pin),
-            title: const Text('PIN Code'),
-            subtitle: const Text('Set up PIN code protection'),
-            onTap: () => context.push(Destinations.settingsPinCode),
-          ),
-          ListTile(
-            leading: const Icon(Icons.child_care),
-            title: const Text('Parental Controls'),
-            subtitle: const Text('Content rating restrictions'),
-            onTap: () => context.push(Destinations.settingsParental),
-          ),
-          if (isAdmin) ...[
-            const _SettingsSection(title: 'Administration'),
-            ListTile(
-              leading: const Icon(Icons.admin_panel_settings),
-              title: const Text('Server Administration'),
-              subtitle: const Text('Manage server settings, users, libraries'),
-              onTap: () => context.push(Destinations.admin),
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primaryContainer,
+                  theme.colorScheme.secondaryContainer,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-          ],
-          const _SettingsSection(title: 'Customization'),
-          ListTile(
-            leading: const Icon(Icons.palette),
-            title: const Text('Theme & Appearance'),
-            subtitle: Text(PlatformDetection.isMobile
-                ? 'Watched indicators, backdrops'
-                : 'Focus color, watched indicators, backdrops'),
-            onTap: () => context.push(Destinations.settingsAppearance),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.tune),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Customize account, playback, and interface behavior',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.view_sidebar),
-            title: const Text('Navigation'),
-            subtitle: const Text('Navbar style, toolbar buttons'),
-            onTap: () => context.push(Destinations.settingsNavigation),
-          ),
-          ListTile(
-            leading: const Icon(Icons.home),
-            title: const Text('Home Sections'),
-            subtitle: const Text('Reorder and toggle home rows'),
-            onTap: () => context.push(Destinations.settingsHomeSections),
-          ),
-          ListTile(
-            leading: const Icon(Icons.featured_play_list),
-            title: const Text('Media Bar'),
-            subtitle: const Text('Featured content, appearance, trailers'),
-            onTap: () => context.push(Destinations.settingsMediaBar),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library),
-            title: const Text('Library Display'),
-            subtitle: const Text('Poster size, image type, folder view'),
-            onTap: () => context.push(Destinations.settingsLibrary),
-          ),
-          const _SettingsSection(title: 'Playback'),
-          ListTile(
-            leading: const Icon(Icons.videocam),
-            title: const Text('Playback'),
-            subtitle: const Text('Bitrate, resolution, behavior'),
-            onTap: () => context.push(Destinations.settingsPlayback),
-          ),
-          ListTile(
-            leading: const Icon(Icons.subtitles),
-            title: const Text('Subtitles'),
-            subtitle: const Text('Language, size, appearance'),
-            onTap: () => context.push(Destinations.settingsSubtitles),
-          ),
-          ListTile(
-            leading: const Icon(Icons.download),
-            title: const Text('Downloads'),
-            subtitle: const Text('Quality, storage, WiFi-only'),
-            onTap: () => context.push(Destinations.settingsDownloads),
-          ),
-          const _SettingsSection(title: 'Moonfin'),
-          ListTile(
-            leading: const Icon(Icons.tune),
-            title: const Text('Moonfin Settings'),
-            subtitle: const Text('Plugin sync, theme music, ratings'),
-            onTap: () => context.push(Destinations.settingsMoonfin),
-          ),
-          ListTile(
-            leading: const Icon(Icons.movie_filter),
-            title: const Text('Seerr'),
-            subtitle: const Text('Media request integration'),
-            onTap: () => context.push(Destinations.settingsSeerr),
-          ),
-          const _SettingsSection(title: 'Other'),
-          ListTile(
-            leading: const Icon(Icons.swap_horiz),
-            title: const Text('Switch Server'),
-            onTap: () => context.go(Destinations.serverSelect),
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Sign Out'),
-            onTap: () async {
-              await GetIt.instance<SessionRepository>().destroyCurrentSession();
-              if (context.mounted) context.go(Destinations.serverSelect);
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final columns = width >= 900
+                  ? 3
+                  : width >= 360
+                      ? 2
+                      : 1;
+              final cardWidth = (width - (columns - 1) * 10) / columns;
+              final cardHeight = columns >= 3
+                  ? (cardWidth * 0.94).clamp(176.0, 222.0)
+                  : (cardWidth * 0.92).clamp(178.0, 240.0);
+
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: sections.length,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  mainAxisExtent: cardHeight,
+                ),
+                itemBuilder: (context, index) {
+                  final section = sections[index];
+                  return _SettingsSectionCard(
+                    section: section,
+                    onTap: () {
+                      if (section.onTap != null) {
+                        section.onTap!();
+                      } else {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => _SectionDetailScreen(section: section),
+                          ),
+                        );
+                      }
+                    },
+                  );
+                },
+              );
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.info),
-            title: const Text('About'),
-            subtitle: const Text('Version, licenses'),
-            onTap: () => context.push(Destinations.settingsAbout),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Text(
+              'Other',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          _SettingsListCard(entries: otherEntries),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsSectionData {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<_SettingsEntry> entries;
+  final VoidCallback? onTap;
+
+  const _SettingsSectionData({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.entries,
+    this.onTap,
+  });
+}
+
+class _SettingsSectionCard extends StatelessWidget {
+  final _SettingsSectionData section;
+  final VoidCallback onTap;
+
+  const _SettingsSectionCard({
+    required this.section,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(11, 11, 11, 9),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.65),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(section.icon, size: 22),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                section.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                section.subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const Spacer(),
+              Row(
+                children: [
+                  if (section.entries.isNotEmpty)
+                    Text(
+                      '${section.entries.length} options',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.arrow_forward,
+                    size: 26,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionDetailScreen extends StatelessWidget {
+  final _SettingsSectionData section;
+
+  const _SectionDetailScreen({required this.section});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(section.title),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < section.entries.length; i++) ...[
+                  _SettingsEntryTile(entry: section.entries[i]),
+                  if (i != section.entries.length - 1)
+                    Divider(
+                      height: 1,
+                      indent: 70,
+                      endIndent: 12,
+                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+                    ),
+                ],
+                const SizedBox(height: 6),
+              ],
+            ),
           ),
         ],
       ),
@@ -137,23 +410,87 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _SettingsSection extends StatelessWidget {
-  final String title;
+class _SettingsListCard extends StatelessWidget {
+  final List<_SettingsEntry> entries;
 
-  const _SettingsSection({required this.title});
+  const _SettingsListCard({required this.entries});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
+      child: Column(
+        children: [
+          for (var i = 0; i < entries.length; i++) ...[
+            _SettingsEntryTile(entry: entries[i]),
+            if (i != entries.length - 1)
+              Divider(
+                height: 1,
+                indent: 70,
+                endIndent: 12,
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+              ),
+          ],
+          const SizedBox(height: 6),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsEntry {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  const _SettingsEntry({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+  });
+}
+
+class _SettingsEntryTile extends StatelessWidget {
+  final _SettingsEntry entry;
+
+  const _SettingsEntryTile({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      minLeadingWidth: 40,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.45),
+        ),
+        child: Icon(entry.icon, size: 20),
+      ),
+      title: Text(
+        entry.title,
+        style: theme.textTheme.titleSmall,
+      ),
+      subtitle: entry.subtitle != null
+          ? Text(
+              entry.subtitle!,
+              style: theme.textTheme.bodySmall,
+            )
+          : null,
+      trailing: const Icon(Icons.chevron_right),
+      onTap: entry.onTap,
     );
   }
 }
