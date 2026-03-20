@@ -26,6 +26,8 @@ import '../../widgets/responsive_layout.dart';
 import '../../widgets/seasonal_effects.dart';
 import 'home_view_model.dart';
 
+const _homeBackground = Color(0xFF101528);
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -145,7 +147,7 @@ class _HomeShellState extends State<_HomeShell> {
         _showExitConfirmation(context);
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: _homeBackground,
         body: NavigationLayout(
           activeRoute: Destinations.home,
           child: Stack(

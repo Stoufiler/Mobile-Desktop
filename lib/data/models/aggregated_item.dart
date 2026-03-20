@@ -83,7 +83,21 @@ class AggregatedItem {
     if (type == 'Episode') {
       final s = parentIndexNumber;
       final e = indexNumber;
-      if (s != null && e != null) return 'S$s:E$e';
+      final series = seriesName?.trim();
+      final episodeInfo = switch ((s, e)) {
+        (final season?, final episode?) => 'S$season:E$episode',
+        _ => null,
+      };
+
+      if (episodeInfo != null && series != null && series.isNotEmpty) {
+        return '$episodeInfo - $series';
+      }
+      if (episodeInfo != null) {
+        return episodeInfo;
+      }
+      if (series != null && series.isNotEmpty) {
+        return series;
+      }
     }
     return productionYear?.toString();
   }
