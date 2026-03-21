@@ -90,6 +90,10 @@ class OfflineRepository {
         .go();
   }
 
+  Future<void> deleteAllItems() async {
+    await _db.delete(_db.downloadedItems).go();
+  }
+
   Future<List<DownloadedItem>> getItems({
     String? type,
     bool onlyCompleted = false,

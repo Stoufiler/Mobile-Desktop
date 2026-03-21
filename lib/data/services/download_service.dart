@@ -39,6 +39,8 @@ class DownloadProgress {
 }
 
 class DownloadService extends ChangeNotifier {
+  static const String _guardCancelReason = 'download_guard_timeout';
+
   final MediaServerClient _client;
   final DownloadNotificationService _notificationService;
   final Dio _downloadDio = Dio(BaseOptions(
@@ -52,6 +54,7 @@ class DownloadService extends ChangeNotifier {
 
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, DateTime> _downloadStartTimes = {};
+  bool _cancelAllRequested = false;
 
   int _totalQueued = 0;
   int _completedCount = 0;
@@ -75,8 +78,12 @@ class DownloadService extends ChangeNotifier {
         .length;
   }
 
+  bool _canClearCancelAllGate() {
+    return _cancelTokens.isEmpty && _inFlightDownloads() == 0;
+  }
+
   Future<void> _waitForDownloadSlot() async {
-    while (_inFlightDownloads() >= _concurrencyLimit()) {
+    while (!_cancelAllRequested && _inFlightDownloads() >= _concurrencyLimit()) {
       await Future.delayed(const Duration(milliseconds: 120));
     }
   }
@@ -395,7 +402,7 @@ class DownloadService extends ChangeNotifier {
   /// Wraps [Dio.download] so that once all expected bytes have been received
   /// the future resolves after a short grace period, even if the HTTP
   /// connection hangs open (common behind reverse proxies / keep-alive).
-  Future<Response?> _downloadWithHangGuard(
+  Future<Response> _downloadWithHangGuard(
     String url,
     String savePath, {
     required Options options,
@@ -405,8 +412,10 @@ class DownloadService extends ChangeNotifier {
   }) async {
     final bytesComplete = Completer<void>();
     Timer? estimatedCompletionTimer;
+    var lastReceived = 0;
+    var lastTotal = -1;
 
-    void completeIfPending() {
+    void markBytesCompleteIfPending() {
       if (!bytesComplete.isCompleted) {
         bytesComplete.complete();
       }
@@ -416,7 +425,7 @@ class DownloadService extends ChangeNotifier {
       estimatedCompletionTimer?.cancel();
       estimatedCompletionTimer = Timer(
         const Duration(seconds: 5),
-        completeIfPending,
+        markBytesCompleteIfPending,
       );
     }
 
@@ -427,9 +436,11 @@ class DownloadService extends ChangeNotifier {
       cancelToken: cancelToken,
       deleteOnError: false,
       onReceiveProgress: (received, total) {
+        lastReceived = received;
+        lastTotal = total;
         onReceiveProgress(received, total);
         if (total > 0 && received >= total && !bytesComplete.isCompleted) {
-          completeIfPending();
+          markBytesCompleteIfPending();
           return;
         }
 
@@ -441,18 +452,74 @@ class DownloadService extends ChangeNotifier {
       },
     );
 
+    final completion = Completer<Response>();
+
+    void completeIfPending(Response value) {
+      if (!completion.isCompleted) {
+        completion.complete(value);
+      }
+    }
+
+    void completeErrorIfPending(Object error, [StackTrace? stackTrace]) {
+      if (!completion.isCompleted) {
+        completion.completeError(error, stackTrace);
+      }
+    }
+
+    downloadFuture.then(completeIfPending).catchError(completeErrorIfPending);
+
+    bytesComplete.future.then((_) async {
+      if (completion.isCompleted) {
+        return;
+      }
+
+      try {
+        final settled = await downloadFuture.timeout(const Duration(seconds: 20));
+        completeIfPending(settled);
+      } on TimeoutException {
+        // Reverse proxies may keep the connection open even after all bytes
+        // are transferred. Finalize as a successful candidate and let
+        // downstream file validation decide integrity.
+        cancelToken.cancel(_guardCancelReason);
+        final headers = Headers.fromMap({
+          if (lastTotal > 0) 'content-length': [lastTotal.toString()],
+        });
+        completeIfPending(
+          Response(
+            requestOptions: RequestOptions(
+              path: url,
+              method: options.method ?? 'GET',
+              headers: options.headers,
+            ),
+            statusCode: 200,
+            headers: headers,
+            data: null,
+            extra: {
+              'guardFinalized': true,
+              'bytesReceived': lastReceived,
+            },
+          ),
+        );
+      } catch (e, st) {
+        completeErrorIfPending(e, st);
+      }
+    }).ignore();
+
     try {
-      return await Future.any<Response?>([
-        downloadFuture.then<Response?>((r) => r),
-        bytesComplete.future
-            .then((_) => Future<Response?>.delayed(
-                  const Duration(seconds: 5),
-                  () => null,
-                )),
-      ]);
+      return await completion.future;
     } finally {
       estimatedCompletionTimer?.cancel();
     }
+  }
+
+  bool _hasAuthToken() {
+    final token = _client.accessToken;
+    return token != null && token.isNotEmpty;
+  }
+
+  bool _isGuardTimeoutCancel(DioException e) {
+    final raw = e.error;
+    return raw is String && raw == _guardCancelReason;
   }
 
   bool _supportsTranscodedDownload(String? type) {
@@ -466,6 +533,22 @@ class DownloadService extends ChangeNotifier {
     }
 
     return {
+      'X-Emby-Token': token,
+      'Authorization': 'MediaBrowser Token="$token"',
+    };
+  }
+
+  Map<String, String> _buildDownloadRequestHeaders() {
+    final token = _client.accessToken;
+    if (token == null || token.isEmpty) {
+      return {
+        'Accept': 'application/octet-stream',
+        'User-Agent': 'Moonfin/Flutter',
+      };
+    }
+    return {
+      'Accept': 'application/octet-stream',
+      'User-Agent': 'Moonfin/Flutter',
       'X-Emby-Token': token,
       'Authorization': 'MediaBrowser Token="$token"',
     };
@@ -503,12 +586,16 @@ class DownloadService extends ChangeNotifier {
         .join('&');
   }
 
-  Map<String, String> _baseDownloadParams(AggregatedItem item, {bool isStatic = false}) {
+  Map<String, String> _baseDownloadParams(
+    AggregatedItem item, {
+    bool isStatic = false,
+    bool includeMediaSourceId = true,
+  }) {
     final mediaSourceId = _primaryMediaSourceId(item);
     return <String, String>{
       if (isStatic) 'Static': 'true',
-      if (mediaSourceId != null) 'MediaSourceId': mediaSourceId,
-      if (_client.accessToken != null) 'api_key': _client.accessToken!,
+      if (includeMediaSourceId && mediaSourceId != null) 'MediaSourceId': mediaSourceId,
+      if (_client.accessToken != null) 'ApiKey': _client.accessToken!,
     };
   }
 
@@ -565,21 +652,243 @@ class DownloadService extends ChangeNotifier {
     return e.message ?? 'Download failed';
   }
 
+  String _friendlyGenericError(Object e) {
+    if (e is TimeoutException) {
+      return 'Download timed out while waiting for transfer completion.';
+    }
+
+    return e.toString();
+  }
+
+  bool _isPrivateIpv4(String host) {
+    final parts = host.split('.');
+    if (parts.length != 4) {
+      return false;
+    }
+
+    final octets = parts.map(int.tryParse).toList(growable: false);
+    if (octets.any((o) => o == null)) {
+      return false;
+    }
+
+    final a = octets[0]!;
+    final b = octets[1]!;
+    return a == 10 ||
+        a == 127 ||
+        (a == 172 && b >= 16 && b <= 31) ||
+        (a == 192 && b == 168);
+  }
+
+  String _networkPath() {
+    final uri = Uri.tryParse(_client.baseUrl);
+    final host = uri?.host.toLowerCase() ?? '';
+    if (host.isEmpty) {
+      return 'unknown';
+    }
+
+    if (host == 'localhost' || host.endsWith('.local') || _isPrivateIpv4(host)) {
+      return 'local-ip';
+    }
+
+    final isLikelyIpv4 = RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(host);
+    if (isLikelyIpv4) {
+      return 'public-ip';
+    }
+
+    return 'domain';
+  }
+
+  String _endpointTypeFromUrl(String url) {
+    final path = Uri.tryParse(url)?.path.toLowerCase() ?? url.toLowerCase();
+    if (path.contains('/items/') && path.contains('/download')) {
+      return 'download';
+    }
+    if (path.contains('/items/') && path.contains('/file')) {
+      return 'file';
+    }
+    if (path.contains('/audio/')) {
+      return 'audio';
+    }
+    if (path.contains('/videos/') && path.contains('/stream')) {
+      return 'stream';
+    }
+    return 'unknown';
+  }
+
+  int? _expectedLengthFromResponse(Response? response) {
+    final header = response?.headers.value('content-length');
+    if (header == null) {
+      return null;
+    }
+    return int.tryParse(header);
+  }
+
+  Map<String, Object?> _responseTelemetry(Response? response) {
+    if (response == null) {
+      return const {};
+    }
+
+    return {
+      'statusCode': response.statusCode,
+      'contentType': response.headers.value('content-type'),
+      'contentLength': response.headers.value('content-length'),
+      'acceptRanges': response.headers.value('accept-ranges'),
+      'contentRange': response.headers.value('content-range'),
+      'transferEncoding': response.headers.value('transfer-encoding'),
+    };
+  }
+
+  String _validationReasonCodeFromError(Object error) {
+    final msg = error.toString().toLowerCase();
+    if (msg.contains('content-type')) return 'invalid_content_type';
+    if (msg.contains('signature')) return 'signature_mismatch';
+    if (msg.contains('html') || msg.contains('text/error')) return 'text_payload';
+    if (msg.contains('content-length')) return 'length_mismatch';
+    if (msg.contains('missing on disk')) return 'missing_file';
+    if (msg.contains('0 bytes')) return 'zero_byte';
+    if (msg.contains('timed out')) return 'timeout';
+    return 'validation_failed';
+  }
+
+  Future<Uint8List> _readPrefix(File file, {int maxBytes = 512}) async {
+    final length = await file.length();
+    final toRead = length < maxBytes ? length : maxBytes;
+    final chunks = await file.openRead(0, toRead).toList();
+    return Uint8List.fromList(chunks.expand((c) => c).toList(growable: false));
+  }
+
+  bool _looksLikeTextPayload(Uint8List bytes) {
+    if (bytes.isEmpty) {
+      return false;
+    }
+
+    final sample = String.fromCharCodes(bytes).toLowerCase();
+    return sample.contains('<html') ||
+        sample.contains('<!doctype') ||
+        sample.contains('{"error"') ||
+        sample.contains('cloudflare') ||
+        sample.contains('nginx') ||
+        sample.contains('forbidden') ||
+        sample.contains('unauthorized');
+  }
+
+  bool _hasMp4Signature(Uint8List bytes) {
+    if (bytes.length < 12) {
+      return false;
+    }
+
+    for (var i = 0; i <= bytes.length - 4 && i < 32; i++) {
+      if (bytes[i] == 0x66 && bytes[i + 1] == 0x74 && bytes[i + 2] == 0x79 && bytes[i + 3] == 0x70) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool _signatureMatchesExtension(Uint8List bytes, String ext) {
+    switch (ext) {
+      case 'mp4':
+      case 'm4v':
+      case 'm4a':
+        return _hasMp4Signature(bytes);
+      case 'mkv':
+      case 'webm':
+        return bytes.length >= 4 && bytes[0] == 0x1A && bytes[1] == 0x45 && bytes[2] == 0xDF && bytes[3] == 0xA3;
+      case 'mp3':
+        return (bytes.length >= 3 && bytes[0] == 0x49 && bytes[1] == 0x44 && bytes[2] == 0x33) ||
+            (bytes.length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0);
+      case 'flac':
+        return bytes.length >= 4 && bytes[0] == 0x66 && bytes[1] == 0x4C && bytes[2] == 0x61 && bytes[3] == 0x43;
+      case 'ogg':
+      case 'opus':
+        return bytes.length >= 4 && bytes[0] == 0x4F && bytes[1] == 0x67 && bytes[2] == 0x67 && bytes[3] == 0x53;
+      case 'wav':
+        return bytes.length >= 12 &&
+            bytes[0] == 0x52 &&
+            bytes[1] == 0x49 &&
+            bytes[2] == 0x46 &&
+            bytes[3] == 0x46 &&
+            bytes[8] == 0x57 &&
+            bytes[9] == 0x41 &&
+            bytes[10] == 0x56 &&
+            bytes[11] == 0x45;
+      case 'pdf':
+        return bytes.length >= 5 && bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46 && bytes[4] == 0x2D;
+      case 'epub':
+      case 'cbz':
+      case 'zip':
+        return bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B && bytes[2] == 0x03 && bytes[3] == 0x04;
+      case 'cbr':
+        return bytes.length >= 7 &&
+            bytes[0] == 0x52 &&
+            bytes[1] == 0x61 &&
+            bytes[2] == 0x72 &&
+            bytes[3] == 0x21 &&
+            bytes[4] == 0x1A &&
+            bytes[5] == 0x07;
+      default:
+        return true;
+    }
+  }
+
+  Future<void> _validateDownloadedFile(
+    File file,
+    DownloadQuality quality, {
+    required int bytesReceived,
+    Response? response,
+  }) async {
+    if (!await file.exists()) {
+      throw StateError('Downloaded file is missing on disk');
+    }
+
+    final fileSize = await file.length();
+    if (fileSize <= 0) {
+      throw StateError('Downloaded file is empty (0 bytes)');
+    }
+
+    final contentType = response?.headers.value('content-type')?.toLowerCase();
+    if (contentType != null &&
+        (contentType.startsWith('text/') ||
+            contentType.contains('application/json') ||
+            contentType.contains('text/html'))) {
+      throw StateError('Download returned non-media content-type: $contentType');
+    }
+
+    final contentLength = response?.headers.value('content-length');
+    if (contentLength != null) {
+      final parsedLength = int.tryParse(contentLength);
+      if (parsedLength != null && parsedLength > 0 && bytesReceived > 0 && bytesReceived != parsedLength) {
+        throw StateError('Downloaded bytes do not match Content-Length (received=$bytesReceived expected=$parsedLength)');
+      }
+    }
+
+    final prefix = await _readPrefix(file);
+    if (_looksLikeTextPayload(prefix)) {
+      throw StateError('Downloaded content appears to be an HTML/text error payload');
+    }
+
+    final ext = file.path.contains('.') ? file.path.split('.').last.toLowerCase() : '';
+    if (ext.isNotEmpty && !_signatureMatchesExtension(prefix, ext)) {
+      throw StateError('Downloaded file signature does not match extension .$ext');
+    }
+
+    if (quality.isTranscoded && !_signatureMatchesExtension(prefix, quality.container)) {
+      throw StateError('Transcoded file signature does not match expected container ${quality.container}');
+    }
+  }
+
   String _buildAudioDownloadUrl(String itemId, AggregatedItem item) {
     final query = _encodeQuery(_baseDownloadParams(item, isStatic: true));
     return '${_client.baseUrl}/Audio/$itemId/stream?$query';
   }
 
   String _buildDirectItemDownloadUrl(String itemId, AggregatedItem item) {
-    final query = _encodeQuery(_baseDownloadParams(item));
+    final query = _encodeQuery(_baseDownloadParams(item, includeMediaSourceId: false));
     return '${_client.baseUrl}/Items/$itemId/Download${query.isEmpty ? '' : '?$query'}';
   }
 
   String _buildDownloadUrl(String itemId, AggregatedItem item, DownloadQuality quality) {
-    if (_usesAudioDownloadEndpoint(item)) {
-      return _buildAudioDownloadUrl(itemId, item);
-    }
-
     if (!quality.isTranscoded || !_supportsTranscodedDownload(item.type)) {
       return _buildDirectItemDownloadUrl(itemId, item);
     }
@@ -615,10 +924,28 @@ class DownloadService extends ChangeNotifier {
   }
 
   Future<void> downloadItem(AggregatedItem item, {DownloadQuality quality = DownloadQuality.original}) async {
+    if (_cancelAllRequested) {
+      if (_canClearCancelAllGate()) {
+        _cancelAllRequested = false;
+      } else {
+        return;
+      }
+    }
     if (isDownloading(item.id)) return;
     await _waitForDownloadSlot();
+    if (_cancelAllRequested) {
+      if (_canClearCancelAllGate()) {
+        _cancelAllRequested = false;
+      } else {
+        return;
+      }
+    }
 
     String? savePath;
+    var selectedUrl = '';
+    var selectedEndpointType = 'unknown';
+    var fallbackCount = 0;
+    final networkPath = _networkPath();
 
     if (!await _checkWifiPolicy()) {
       _activeDownloads[item.id] = DownloadProgress(
@@ -668,11 +995,18 @@ class DownloadService extends ChangeNotifier {
         parentIndexNumber: Value(item.parentIndexNumber),
       ));
 
-      unawaited(_logger.logQueued(fullItem, quality));
+      unawaited(_logger.logQueued(fullItem, quality, telemetry: {
+        'qualityMode': quality.isTranscoded ? 'transcoded' : 'original',
+        'networkPath': networkPath,
+      }));
 
       final cancelToken = CancelToken();
       _cancelTokens[item.id] = cancelToken;
       _downloadStartTimes[item.id] = DateTime.now();
+
+      if (!_hasAuthToken()) {
+        throw StateError('Missing authentication token for download request. Please re-login and try again.');
+      }
 
       final initialProgress = _initialProgressForQuality(quality);
 
@@ -690,17 +1024,26 @@ class DownloadService extends ChangeNotifier {
       notifyListeners();
 
       final url = _buildDownloadUrl(item.id, fullItem, quality);
-      final requestOptions = Options(headers: _buildAuthHeaders());
+      selectedUrl = url;
+      selectedEndpointType = _endpointTypeFromUrl(selectedUrl);
+      fallbackCount = 0;
+      final headers = _buildDownloadRequestHeaders();
+      final requestOptions = Options(headers: headers, method: 'GET');
 
-      unawaited(_logger.logStarted(fullItem, quality));
+      unawaited(_logger.logStarted(fullItem, quality, telemetry: {
+        'endpointType': selectedEndpointType,
+        'networkPath': networkPath,
+        'terminalReason': 'started',
+      }));
 
       void onReceiveProgress(int received, int total) {
-        final progress = _calculateProgress(
+        final rawProgress = _calculateProgress(
           received: received,
           total: total,
           estimatedSize: estimatedSize,
           quality: quality,
         );
+        final progress = rawProgress >= 1.0 ? 0.99 : rawProgress;
         _activeDownloads[item.id] = DownloadProgress(
           itemId: item.id,
           fileName: fileName,
@@ -718,8 +1061,47 @@ class DownloadService extends ChangeNotifier {
           batchTotal: _totalQueued,
           batchCompleted: _completedCount,
         );
-        unawaited(_logger.logProgress(fullItem, progress, received));
+        unawaited(_logger.logProgress(fullItem, progress, received, telemetry: {
+          'endpointType': selectedEndpointType,
+          'networkPath': networkPath,
+          'bytesReceived': received,
+          'expectedLength': total > 0 ? total : null,
+        }));
         notifyListeners();
+      }
+
+      Future<Response?> tryFallbackDownload() async {
+        final fallbackUrls = _buildDownloadFallbackUrls(
+          fullItem,
+          primaryUrl: url,
+        );
+
+        for (final fallbackUrl in fallbackUrls) {
+          try {
+            final fallbackOptions = Options(
+              headers: _buildDownloadRequestHeaders(),
+              method: 'GET',
+            );
+            final response = await _downloadWithHangGuard(
+              fallbackUrl,
+              savePath!,
+              options: fallbackOptions,
+              cancelToken: cancelToken,
+              estimatedSize: estimatedSize,
+              onReceiveProgress: onReceiveProgress,
+            );
+            selectedUrl = fallbackUrl;
+            selectedEndpointType = _endpointTypeFromUrl(selectedUrl);
+            fallbackCount++;
+            return response;
+          } on DioException {
+            continue;
+          } on TimeoutException {
+            continue;
+          }
+        }
+
+        return null;
       }
 
       Response? downloadResponse;
@@ -737,40 +1119,41 @@ class DownloadService extends ChangeNotifier {
           rethrow;
         }
 
-        var retrySucceeded = false;
-        final fallbackUrls = _buildDownloadFallbackUrls(
-          fullItem,
-          primaryUrl: url,
-        );
-        for (final fallbackUrl in fallbackUrls) {
-          try {
-            downloadResponse = await _downloadWithHangGuard(
-              fallbackUrl,
-              savePath,
-              options: requestOptions,
-              cancelToken: cancelToken,
-              estimatedSize: estimatedSize,
-              onReceiveProgress: onReceiveProgress,
-            );
-            retrySucceeded = true;
-            break;
-          } on DioException {
-            continue;
-          }
-        }
-
-        if (!retrySucceeded) {
+        final fallbackResponse = await tryFallbackDownload();
+        if (fallbackResponse == null) {
           rethrow;
         }
+        downloadResponse = fallbackResponse;
+      } on TimeoutException {
+
+        final fallbackResponse = await tryFallbackDownload();
+        if (fallbackResponse == null) {
+          rethrow;
+        }
+        downloadResponse = fallbackResponse;
       }
 
       final savedFile = File(savePath);
-      final fileSize = await savedFile.length();
 
-      if (fileSize == 0) {
-        unawaited(_logger.logZeroByteFile(fullItem));
-        throw StateError('Downloaded file is empty (0 bytes)');
-      }
+      final currentProgress = _activeDownloads[item.id];
+      final bytesReceived = currentProgress?.bytesReceived ?? 0;
+      final expectedLength = _expectedLengthFromResponse(downloadResponse);
+
+      _activeDownloads[item.id] = DownloadProgress(
+        itemId: item.id,
+        fileName: fileName,
+        progress: 1.0,
+        bytesReceived: bytesReceived,
+      );
+      await _offlineRepo.updateDownloadStatus(item.id, 1, progress: 1.0);
+      notifyListeners();
+
+      await _validateDownloadedFile(
+        savedFile,
+        quality,
+        bytesReceived: bytesReceived,
+        response: downloadResponse,
+      );
 
       if (fullItem.type == 'Book') {
         final corrected = await _correctBookExtension(
@@ -782,7 +1165,15 @@ class DownloadService extends ChangeNotifier {
       }
 
       final finalSize = await File(savePath).length();
-      unawaited(_logger.logFileVerified(fullItem, finalSize));
+      unawaited(_logger.logFileVerified(fullItem, finalSize, telemetry: {
+        'endpointType': selectedEndpointType,
+        'networkPath': networkPath,
+        'statusCode': downloadResponse.statusCode,
+        'bytesReceived': bytesReceived,
+        'expectedLength': expectedLength,
+        'fallbackCount': fallbackCount,
+        ..._responseTelemetry(downloadResponse),
+      }));
       await _offlineRepo.setLocalFilePath(item.id, savePath, fileSize: finalSize);
       await _offlineRepo.updateDownloadStatus(item.id, 2);
       await _populateOfflineAssets(fullItem);
@@ -794,7 +1185,16 @@ class DownloadService extends ChangeNotifier {
       final elapsed = DateTime.now().difference(
         _downloadStartTimes[item.id] ?? DateTime.now(),
       );
-      unawaited(_logger.logComplete(fullItem, quality, finalSize, elapsed));
+      unawaited(_logger.logComplete(fullItem, quality, finalSize, elapsed, telemetry: {
+        'endpointType': selectedEndpointType,
+        'networkPath': networkPath,
+        'statusCode': downloadResponse.statusCode,
+        'bytesReceived': bytesReceived,
+        'expectedLength': expectedLength,
+        'fallbackCount': fallbackCount,
+        'terminalReason': 'completed',
+        ..._responseTelemetry(downloadResponse),
+      }));
       unawaited(_logger.uploadToServer(_client));
 
       _activeDownloads[item.id] = DownloadProgress(
@@ -815,7 +1215,7 @@ class DownloadService extends ChangeNotifier {
 
       await _downloadExternalSubtitles(fullItem, dir, fileName.replaceAll(RegExp(r'\.[^.]+$'), ''));
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.cancel) {
+      if (e.type == DioExceptionType.cancel && !_isGuardTimeoutCancel(e)) {
         _activeDownloads.remove(item.id);
         final imageDir = await _storagePath.getImageCacheDir();
         if (savePath != null) {
@@ -825,10 +1225,15 @@ class DownloadService extends ChangeNotifier {
         await _offlineRepo.deleteItem(item.id);
         await _cleanupEpisodeContainers(item, imageDir);
         await _notificationService.dismiss();
-        unawaited(_logger.logCancelled(item));
+        unawaited(_logger.logCancelled(item, telemetry: {
+          'endpointType': selectedEndpointType,
+          'networkPath': networkPath,
+          'terminalReason': 'cancelled',
+        }));
         unawaited(_logger.uploadToServer(_client));
       } else {
         final friendlyError = _friendlyDioError(e);
+        final isGuardTimeout = _isGuardTimeoutCancel(e);
         if (savePath != null) {
           await _deleteFileArtifacts(savePath);
         }
@@ -842,9 +1247,38 @@ class DownloadService extends ChangeNotifier {
           itemName: item.name,
           error: friendlyError,
         );
-        unawaited(_logger.logFailed(item, quality, friendlyError));
+        unawaited(_logger.logFailed(item, quality, friendlyError, telemetry: {
+          'endpointType': selectedEndpointType,
+          'networkPath': networkPath,
+          'statusCode': e.response?.statusCode,
+          'terminalReason': isGuardTimeout ? 'timeout' : 'failed',
+          'validationReasonCode': isGuardTimeout ? 'timeout' : null,
+          ..._responseTelemetry(e.response),
+        }));
         unawaited(_logger.uploadToServer(_client));
       }
+    } on TimeoutException catch (e) {
+      final friendlyError = _friendlyGenericError(e);
+      if (savePath != null) {
+        await _deleteFileArtifacts(savePath);
+      }
+      _activeDownloads[item.id] = DownloadProgress(
+        itemId: item.id,
+        fileName: item.name,
+        error: friendlyError,
+      );
+      await _offlineRepo.updateDownloadStatus(item.id, 3, error: friendlyError);
+      await _notificationService.showError(
+        itemName: item.name,
+        error: friendlyError,
+      );
+      unawaited(_logger.logFailed(item, quality, friendlyError, telemetry: {
+        'endpointType': selectedEndpointType,
+        'networkPath': networkPath,
+        'terminalReason': 'timeout',
+        'validationReasonCode': 'timeout',
+      }));
+      unawaited(_logger.uploadToServer(_client));
     } catch (e) {
       if (savePath != null) {
         await _deleteFileArtifacts(savePath);
@@ -859,7 +1293,13 @@ class DownloadService extends ChangeNotifier {
         itemName: item.name,
         error: e.toString(),
       );
-      unawaited(_logger.logFailed(item, quality, e.toString()));
+      final reasonCode = _validationReasonCodeFromError(e);
+      unawaited(_logger.logFailed(item, quality, e.toString(), telemetry: {
+        'endpointType': selectedEndpointType,
+        'networkPath': networkPath,
+        'terminalReason': 'failed',
+        'validationReasonCode': reasonCode,
+      }));
       unawaited(_logger.uploadToServer(_client));
     } finally {
       _downloadStartTimes.remove(item.id);
@@ -869,6 +1309,7 @@ class DownloadService extends ChangeNotifier {
   }
 
   Future<void> downloadItems(List<AggregatedItem> items, {DownloadQuality quality = DownloadQuality.original}) async {
+    _cancelAllRequested = false;
     _totalQueued = items.length;
     _completedCount = 0;
     notifyListeners();
@@ -881,7 +1322,7 @@ class DownloadService extends ChangeNotifier {
     final futures = <Future<void>>[];
 
     Future<void> processNext() async {
-      while (queue.isNotEmpty) {
+      while (!_cancelAllRequested && queue.isNotEmpty) {
         final item = queue.removeAt(0);
         await downloadItem(item, quality: quality);
       }
@@ -892,12 +1333,14 @@ class DownloadService extends ChangeNotifier {
     }
     await Future.wait(futures);
 
-    unawaited(_logger.logBatchComplete(
-      _completedCount,
-      items.length,
-      DateTime.now().difference(batchStart),
-    ));
-    unawaited(_logger.uploadToServer(_client));
+    if (!_cancelAllRequested) {
+      unawaited(_logger.logBatchComplete(
+        _completedCount,
+        items.length,
+        DateTime.now().difference(batchStart),
+      ));
+      unawaited(_logger.uploadToServer(_client));
+    }
 
     _totalQueued = 0;
     _completedCount = 0;
@@ -1167,23 +1610,63 @@ class DownloadService extends ChangeNotifier {
   }
 
   void cancelAll() {
+    _cancelAllRequested = true;
     for (final token in _cancelTokens.values) {
       token.cancel();
     }
+    _cancelTokens.clear();
+    _totalQueued = 0;
+    _completedCount = 0;
     _notificationService.dismiss();
+    notifyListeners();
   }
 
   Future<void> clearAllDownloads() async {
+    cancelAll();
+
     final allItems = await _offlineRepo.getItems();
     for (final item in allItems) {
-      if (item.localFilePath != null) {
-        final f = File(item.localFilePath!);
-        if (await f.exists()) await f.delete();
+      final path = item.localFilePath;
+      if (path == null || path.isEmpty) {
+        continue;
       }
-      await _offlineRepo.deleteItem(item.itemId);
+
+      try {
+        final f = File(path);
+        if (await f.exists()) {
+          await f.delete();
+        }
+      } catch (_) {}
     }
-    final imageDir = await _storagePath.getImageCacheDir();
-    if (await imageDir.exists()) await imageDir.delete(recursive: true);
+
+    final offlineRoot = await _storagePath.getOfflineRoot();
+    const managedFolders = [
+      'Movies',
+      'TV',
+      'Music',
+      'Audiobooks',
+      'Books',
+      'Other',
+      'images',
+    ];
+
+    for (final folder in managedFolders) {
+      final dir = Directory('${offlineRoot.path}/$folder');
+      try {
+        if (await dir.exists()) {
+          await dir.delete(recursive: true);
+        }
+      } catch (_) {}
+    }
+
+    await _offlineRepo.deleteAllItems();
+    _activeDownloads.clear();
+    _cancelTokens.clear();
+    _downloadStartTimes.clear();
+    _totalQueued = 0;
+    _completedCount = 0;
+    await _notificationService.dismiss();
+    notifyListeners();
   }
 
   Future<void> recoverIncompleteDownloads() async {

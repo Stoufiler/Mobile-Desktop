@@ -468,10 +468,11 @@ class _DetailContent extends StatelessWidget {
     final canManagePlaylistTracks =
         isPlaylist && viewModel.canManagePlaylistTracks;
     final canDownloadAll =
-      item.type == 'MusicAlbum' ||
+      _canUserDownload() &&
+      (item.type == 'MusicAlbum' ||
       (item.type == 'Playlist' &&
         viewModel.tracks.isNotEmpty &&
-        viewModel.tracks.every(_isAudioItem));
+        viewModel.tracks.every(_isAudioItem)));
     final canDeleteDownloaded = item.type == 'MusicAlbum';
     return [
       _AlbumHeader(
@@ -1601,9 +1602,9 @@ class _ActionButtonsState extends State<_ActionButtons> {
           onPressed:
               () => AddToPlaylistDialog.show(context, itemIds: [item.id]),
         ),
-      if (_isDownloadable(item.type))
+      if (_isDownloadable(item.type) && _canUserDownload())
         _DownloadButton(item: item, viewModel: viewModel),
-      if (_isDownloadable(item.type)) _DeleteDownloadButton(item: item),
+      if (_isDownloadable(item.type) && _canUserDownload()) _DeleteDownloadButton(item: item),
       if (item.type == 'Episode' && item.seriesId != null)
         _DetailActionButton(
           label: 'Go to Series',
@@ -1867,6 +1868,11 @@ bool _isDownloadable(String? type) {
       type == 'Episode' ||
       type == 'Season' ||
       type == 'Series';
+}
+
+bool _canUserDownload() {
+  final user = GetIt.instance<UserRepository>().currentUser;
+  return user?.canDownload ?? false;
 }
 
 class _DownloadButton extends StatelessWidget {

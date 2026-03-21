@@ -4,6 +4,7 @@ sealed class User {
   String get serverId;
   String? get imageTag;
   bool get isAdministrator;
+  bool get canDownload;
 
   const User();
 }
@@ -21,6 +22,8 @@ class PrivateUser extends User {
   final String? imageTag;
   @override
   final bool isAdministrator;
+  @override
+  final bool canDownload;
 
   const PrivateUser({
     required this.id,
@@ -30,6 +33,7 @@ class PrivateUser extends User {
     required this.lastUsed,
     this.imageTag,
     this.isAdministrator = false,
+    this.canDownload = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -38,6 +42,7 @@ class PrivateUser extends User {
         'lastUsed': lastUsed.toIso8601String(),
         'imageTag': imageTag,
         'isAdministrator': isAdministrator,
+        'canDownload': canDownload,
       };
 
   factory PrivateUser.fromJson(
@@ -54,6 +59,7 @@ class PrivateUser extends User {
           DateTime.now(),
       imageTag: json['imageTag'] as String?,
       isAdministrator: json['isAdministrator'] as bool? ?? false,
+      canDownload: json['canDownload'] as bool? ?? false,
     );
   }
 
@@ -65,6 +71,7 @@ class PrivateUser extends User {
     DateTime? lastUsed,
     String? imageTag,
     bool? isAdministrator,
+    bool? canDownload,
   }) {
     return PrivateUser(
       id: id ?? this.id,
@@ -74,6 +81,7 @@ class PrivateUser extends User {
       lastUsed: lastUsed ?? this.lastUsed,
       imageTag: imageTag ?? this.imageTag,
       isAdministrator: isAdministrator ?? this.isAdministrator,
+      canDownload: canDownload ?? this.canDownload,
     );
   }
 }
@@ -90,6 +98,8 @@ class PublicUser extends User {
   final String? imageTag;
   @override
   final bool isAdministrator;
+  @override
+  final bool canDownload;
 
   const PublicUser({
     required this.id,
@@ -98,5 +108,6 @@ class PublicUser extends User {
     required this.hasPassword,
     this.imageTag,
     this.isAdministrator = false,
+    this.canDownload = false,
   });
 }

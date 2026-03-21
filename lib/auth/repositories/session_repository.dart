@@ -121,17 +121,20 @@ class SessionRepository {
     _activeServerId = serverId;
     _activeUserId = userId;
 
-    // Refresh admin status from server (stored data may be stale)
     var updatedUser = user;
     try {
       final serverUser = await client.usersApi.getCurrentUser();
       final isAdmin = serverUser.policy?.isAdministrator ?? false;
-      if (isAdmin != user.isAdministrator) {
-        updatedUser = user.copyWith(isAdministrator: isAdmin);
+      final canDownload = serverUser.policy?.enableContentDownloading ?? false;
+
+      if (isAdmin != user.isAdministrator || canDownload != user.canDownload) {
+        updatedUser = user.copyWith(
+          isAdministrator: isAdmin,
+          canDownload: canDownload,
+        );
         await _authStore.putUser(updatedUser);
       }
     } catch (_) {
-      // Use stored value if server is unreachable
     }
 
     _userRepository.setCurrentUser(updatedUser);

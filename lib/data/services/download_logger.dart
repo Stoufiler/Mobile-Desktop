@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -26,20 +27,16 @@ import '../models/download_quality.dart';
 class DownloadLogger {
   File? _logFile;
   DateTime? _logDate;
+  Future<void> _writeQueue = Future.value();
 
-  // Milestone tracker: itemId → last milestone reported (0.0 = none)
   final Map<String, double> _milestones = {};
 
-  // Upload throttle: don't push to server more than once per 60 s
   DateTime? _lastUpload;
 
-  // Dedicated Dio instance for uploads only (short timeout, no retry)
   final Dio _uploadDio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 15),
   ));
-
-  // ─── internal helpers ────────────────────────────────────────────────────
 
   Future<File> _getLogFile() async {
     final now = DateTime.now();
@@ -73,13 +70,16 @@ class DownloadLogger {
   }
 
   Future<void> _write(String line) async {
-    try {
-      final file = await _getLogFile();
-      await file.writeAsString('$line\n', mode: FileMode.append, flush: true);
-    } catch (e) {
-      // Never crash the app because of logging.
-      if (kDebugMode) debugPrint('[DownloadLogger] write error: $e');
-    }
+    _writeQueue = _writeQueue.catchError((_) {}).then((_) async {
+      try {
+        final file = await _getLogFile();
+        await file.writeAsString('$line\n', mode: FileMode.append, flush: true);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[DownloadLogger] write error: $e');
+      }
+    });
+
+    await _writeQueue;
   }
 
   String _timestamp() {
@@ -196,6 +196,27 @@ class DownloadLogger {
     return '${s}s';
   }
 
+  String _telemetrySuffix(Map<String, Object?>? telemetry) {
+    if (telemetry == null || telemetry.isEmpty) {
+      return '';
+    }
+
+    final clean = <String, Object?>{};
+    telemetry.forEach((key, value) {
+      if (value == null) {
+        return;
+      }
+
+      clean[key] = value;
+    });
+
+    if (clean.isEmpty) {
+      return '';
+    }
+
+    return ' | telemetry=${jsonEncode(clean)}';
+  }
+
   // ─── public API ──────────────────────────────────────────────────────────
 
   /// Called when an item enters the queue (before any network activity).
@@ -204,13 +225,14 @@ class DownloadLogger {
     DownloadQuality quality, {
     int? batchIndex,
     int? batchTotal,
+    Map<String, Object?>? telemetry,
   }) async {
     final extra = (batchIndex != null && batchTotal != null)
         ? ' [batch item $batchIndex / $batchTotal]'
         : '';
     await _write(
       '${_timestamp()} | ${_levelPad('QUEUED')} | ${_typePad(item.type)} | '
-      '${_describeItem(item)} | ${_qualityDesc(quality)}$extra',
+      '${_describeItem(item)} | ${_qualityDesc(quality)}$extra${_telemetrySuffix(telemetry)}',
     );
   }
 
@@ -218,6 +240,7 @@ class DownloadLogger {
   Future<void> logStarted(
     AggregatedItem item,
     DownloadQuality quality,
+    {Map<String, Object?>? telemetry}
   ) async {
     _milestones[item.id] = 0.0;
     final container = _containerOf(item, quality);
@@ -229,7 +252,7 @@ class DownloadLogger {
 
     await _write(
       '${_timestamp()} | ${_levelPad('STARTED')} | ${_typePad(item.type)} | '
-      '${_describeItem(item)} | $container | $codec | ${_qualityDesc(quality)} | est. $estStr',
+      '${_describeItem(item)} | $container | $codec | ${_qualityDesc(quality)} | est. $estStr${_telemetrySuffix(telemetry)}',
     );
   }
 
@@ -239,6 +262,7 @@ class DownloadLogger {
     AggregatedItem item,
     double progress,
     int bytesReceived,
+    {Map<String, Object?>? telemetry}
   ) async {
     if (progress < 0) return; // transcoded indeterminate
     final milestones = [0.25, 0.50, 0.75, 1.0];
@@ -249,7 +273,7 @@ class DownloadLogger {
         final pct = (m * 100).toStringAsFixed(0);
         await _write(
           '${_timestamp()} | ${_levelPad('PROGRESS')} | ${_typePad(item.type)} | '
-          '${_describeItem(item)} | $pct% — ${_formatBytes(bytesReceived)} received',
+          '${_describeItem(item)} | $pct% — ${_formatBytes(bytesReceived)} received${_telemetrySuffix(telemetry)}',
         );
         break; // only one milestone per call
       }
@@ -257,18 +281,18 @@ class DownloadLogger {
   }
 
   /// Called after the downloaded file has been stat'd and confirmed > 0 bytes.
-  Future<void> logFileVerified(AggregatedItem item, int fileBytes) async {
+  Future<void> logFileVerified(AggregatedItem item, int fileBytes, {Map<String, Object?>? telemetry}) async {
     await _write(
       '${_timestamp()} | ${_levelPad('VERIFIED')} | ${_typePad(item.type)} | '
-      '${_describeItem(item)} | ${_formatBytes(fileBytes)} on disk',
+      '${_describeItem(item)} | ${_formatBytes(fileBytes)} on disk${_telemetrySuffix(telemetry)}',
     );
   }
 
   /// Called when a 0-byte file is found immediately after download.
-  Future<void> logZeroByteFile(AggregatedItem item) async {
+  Future<void> logZeroByteFile(AggregatedItem item, {Map<String, Object?>? telemetry}) async {
     await _write(
       '${_timestamp()} | ${_levelPad('WARN')} | ${_typePad(item.type)} | '
-      '${_describeItem(item)} | *** 0-byte file detected — download considered failed ***',
+      '${_describeItem(item)} | *** 0-byte file detected — download considered failed ***${_telemetrySuffix(telemetry)}',
     );
   }
 
@@ -278,21 +302,22 @@ class DownloadLogger {
     DownloadQuality quality,
     int finalBytes,
     Duration elapsed,
+    {Map<String, Object?>? telemetry}
   ) async {
     _milestones.remove(item.id);
     await _write(
       '${_timestamp()} | ${_levelPad('COMPLETE')} | ${_typePad(item.type)} | '
       '${_describeItem(item)} | ${_qualityDesc(quality)} | '
-      '${_formatBytes(finalBytes)} | ${_formatDuration(elapsed)}',
+      '${_formatBytes(finalBytes)} | ${_formatDuration(elapsed)}${_telemetrySuffix(telemetry)}',
     );
   }
 
   /// Called when the user cancels a download.
-  Future<void> logCancelled(AggregatedItem item) async {
+  Future<void> logCancelled(AggregatedItem item, {Map<String, Object?>? telemetry}) async {
     _milestones.remove(item.id);
     await _write(
       '${_timestamp()} | ${_levelPad('CANCELLED')} | ${_typePad(item.type)} | '
-      '${_describeItem(item)}',
+      '${_describeItem(item)}${_telemetrySuffix(telemetry)}',
     );
   }
 
@@ -301,27 +326,28 @@ class DownloadLogger {
     AggregatedItem item,
     DownloadQuality quality,
     String error,
+    {Map<String, Object?>? telemetry}
   ) async {
     _milestones.remove(item.id);
     await _write(
       '${_timestamp()} | ${_levelPad('FAILED')} | ${_typePad(item.type)} | '
-      '${_describeItem(item)} | ${_qualityDesc(quality)} | $error',
+      '${_describeItem(item)} | ${_qualityDesc(quality)} | $error${_telemetrySuffix(telemetry)}',
     );
   }
 
   /// Generic warning (WiFi policy, storage limit, etc.).
-  Future<void> logWarn(AggregatedItem item, String message) async {
+  Future<void> logWarn(AggregatedItem item, String message, {Map<String, Object?>? telemetry}) async {
     await _write(
       '${_timestamp()} | ${_levelPad('WARN')} | ${_typePad(item.type)} | '
-      '${_describeItem(item)} | $message',
+      '${_describeItem(item)} | $message${_telemetrySuffix(telemetry)}',
     );
   }
 
   /// Called at the start of a batch download.
-  Future<void> logBatchStarted(int total, DownloadQuality quality) async {
+  Future<void> logBatchStarted(int total, DownloadQuality quality, {Map<String, Object?>? telemetry}) async {
     await _write(
       '${_timestamp()} | ${_levelPad('BATCH')} | -         | '
-      'Starting batch of $total items | ${_qualityDesc(quality)}',
+      'Starting batch of $total items | ${_qualityDesc(quality)}${_telemetrySuffix(telemetry)}',
     );
   }
 
@@ -330,18 +356,19 @@ class DownloadLogger {
     int completed,
     int total,
     Duration elapsed,
+    {Map<String, Object?>? telemetry}
   ) async {
     await _write(
       '${_timestamp()} | ${_levelPad('BATCH')} | -         | '
-      'Batch complete: $completed / $total | ${_formatDuration(elapsed)}',
+      'Batch complete: $completed / $total | ${_formatDuration(elapsed)}${_telemetrySuffix(telemetry)}',
     );
   }
 
   /// Called during startup recovery when an interrupted download is re-queued or marked failed.
-  Future<void> logRecovered(String itemId, String itemName, String resolution) async {
+  Future<void> logRecovered(String itemId, String itemName, String resolution, {Map<String, Object?>? telemetry}) async {
     await _write(
       '${_timestamp()} | ${_levelPad('RECOVERED')} | -         | '
-      '"$itemName" ($itemId) | $resolution',
+      '"$itemName" ($itemId) | $resolution${_telemetrySuffix(telemetry)}',
     );
   }
 
