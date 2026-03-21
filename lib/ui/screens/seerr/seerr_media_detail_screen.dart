@@ -506,6 +506,7 @@ class _SeerrMediaDetailScreenState
   Widget _buildRelatedRow(String title, List<SeerrDiscoverItem> items) {
     return LibraryRow(
       title: title,
+      rowHeight: 236,
       children: items
           .map((item) => MediaCard(
                 title: item.displayTitle,

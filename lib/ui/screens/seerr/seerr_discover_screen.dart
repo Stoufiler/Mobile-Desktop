@@ -143,11 +143,6 @@ class _SeerrDiscoverScreenState extends State<SeerrDiscoverScreen> {
     final visibleRows = <(int, SeerrDiscoverRow)>[];
     for (var i = 0; i < rows.length; i++) {
       final row = rows[i];
-      if (row.type == SeerrRowType.recentRequests &&
-          !row.isLoading &&
-          row.items.isEmpty) {
-        continue;
-      }
       visibleRows.add((i, row));
     }
 
@@ -200,6 +195,7 @@ class _SeerrDiscoverScreenState extends State<SeerrDiscoverScreen> {
       },
       child: LibraryRow(
         title: row.title,
+        rowHeight: 236,
         children: children,
       ),
     );

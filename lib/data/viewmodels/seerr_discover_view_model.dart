@@ -250,7 +250,7 @@ class SeerrDiscoverViewModel extends ChangeNotifier {
         limit: _prefs.fetchLimit.limit,
       );
 
-      final items = response.results
+      final rawItems = response.results
           .where((r) => r.media != null)
           .map((r) {
             final media = r.media!;
@@ -271,14 +271,79 @@ class SeerrDiscoverViewModel extends ChangeNotifier {
               ),
             );
           })
-          .where((item) => item.posterPath != null || item.backdropPath != null)
           .toList();
 
-      final filtered = _filterItems(items);
-      _updateRow(index, row.copyWith(items: filtered, isLoading: false));
+      final items = await Future.wait(rawItems.map(_enrichRequestItem));
+
+      _updateRow(index, row.copyWith(items: items, isLoading: false));
     } catch (e) {
       debugPrint('[SeerrDiscover] Failed to load requests: $e');
       _updateRow(index, row.copyWith(isLoading: false));
+    }
+  }
+
+  Future<SeerrDiscoverItem> _enrichRequestItem(SeerrDiscoverItem item) async {
+    if (item.posterPath != null || item.backdropPath != null) {
+      return item;
+    }
+
+    final tmdbId = item.mediaInfo?.tmdbId ?? item.id;
+    if (tmdbId <= 0) return item;
+
+    try {
+      if (item.mediaType == 'tv') {
+        final details = await _repo.getTvDetails(tmdbId);
+        return SeerrDiscoverItem(
+          id: item.id,
+          mediaType: item.mediaType,
+          title: item.title,
+          name: item.name,
+          originalTitle: item.originalTitle,
+          originalName: item.originalName,
+          posterPath: details.posterPath ?? item.posterPath,
+          backdropPath: details.backdropPath ?? item.backdropPath,
+          overview: item.overview,
+          releaseDate: item.releaseDate,
+          firstAirDate: item.firstAirDate,
+          originalLanguage: item.originalLanguage,
+          genreIds: item.genreIds,
+          voteAverage: item.voteAverage,
+          voteCount: item.voteCount,
+          popularity: item.popularity,
+          adult: item.adult,
+          mediaInfo: item.mediaInfo,
+          character: item.character,
+          job: item.job,
+          department: item.department,
+        );
+      }
+
+      final details = await _repo.getMovieDetails(tmdbId);
+      return SeerrDiscoverItem(
+        id: item.id,
+        mediaType: item.mediaType,
+        title: item.title,
+        name: item.name,
+        originalTitle: item.originalTitle,
+        originalName: item.originalName,
+        posterPath: details.posterPath ?? item.posterPath,
+        backdropPath: details.backdropPath ?? item.backdropPath,
+        overview: item.overview,
+        releaseDate: item.releaseDate,
+        firstAirDate: item.firstAirDate,
+        originalLanguage: item.originalLanguage,
+        genreIds: item.genreIds,
+        voteAverage: item.voteAverage,
+        voteCount: item.voteCount,
+        popularity: item.popularity,
+        adult: item.adult,
+        mediaInfo: item.mediaInfo,
+        character: item.character,
+        job: item.job,
+        department: item.department,
+      );
+    } catch (_) {
+      return item;
     }
   }
 
