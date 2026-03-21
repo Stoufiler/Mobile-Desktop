@@ -235,15 +235,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           LayoutBuilder(
             builder: (context, constraints) {
               final width = constraints.maxWidth;
-              final columns = width >= 900
-                  ? 3
-                  : width >= 360
+              final columns = width >= 1500
+                ? 5
+                : width >= 1180
+                  ? 4
+                  : width >= 860
+                    ? 3
+                    : width >= 360
                       ? 2
                       : 1;
               final cardWidth = (width - (columns - 1) * 10) / columns;
-              final cardHeight = columns >= 3
-                  ? (cardWidth * 0.94).clamp(176.0, 222.0)
-                  : (cardWidth * 0.92).clamp(178.0, 240.0);
+              final cardScale = columns >= 4
+                ? 0.64
+                : columns == 3
+                  ? 0.72
+                  : 0.82;
+              final cardHeight = (cardWidth * cardScale).clamp(136.0, 196.0);
+              final compactCard = cardHeight < 164;
 
               return GridView.builder(
                 shrinkWrap: true,
@@ -259,6 +267,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   final section = sections[index];
                   return _SettingsSectionCard(
                     section: section,
+                    compact: compactCard,
                     onTap: () {
                       if (section.onTap != null) {
                         section.onTap!();
@@ -315,23 +324,40 @@ class _SettingsSectionData {
 
 class _SettingsSectionCard extends StatelessWidget {
   final _SettingsSectionData section;
+  final bool compact;
   final VoidCallback onTap;
 
   const _SettingsSectionCard({
     required this.section,
+    this.compact = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cardPadding = compact
+        ? const EdgeInsets.fromLTRB(10, 9, 10, 8)
+        : const EdgeInsets.fromLTRB(11, 11, 11, 9);
+    final iconBoxSize = compact ? 42.0 : 48.0;
+    final iconSize = compact ? 20.0 : 22.0;
+    final iconRadius = compact ? 12.0 : 14.0;
+    final titleStyle = compact
+        ? theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)
+        : theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
+    final subtitleStyle = compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium;
+    final optionsStyle = compact
+        ? theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700)
+        : theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700);
+    final arrowSize = compact ? 24.0 : 26.0;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(11, 11, 11, 9),
+          padding: cardPadding,
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(20),
@@ -343,19 +369,19 @@ class _SettingsSectionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: iconBoxSize,
+                height: iconBoxSize,
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(iconRadius),
                 ),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
                     Center(
                       child: section.iconBuilder != null
-                          ? section.iconBuilder!(22, Colors.white)
-                          : Icon(section.icon, size: 22),
+                          ? section.iconBuilder!(iconSize, Colors.white)
+                          : Icon(section.icon, size: iconSize),
                     ),
                     if (section.badgeCount > 0)
                       Positioned(
@@ -384,16 +410,14 @@ class _SettingsSectionCard extends StatelessWidget {
                 section.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: titleStyle,
               ),
               const SizedBox(height: 3),
               Text(
                 section.subtitle,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
+                style: subtitleStyle,
               ),
               const Spacer(),
               Row(
@@ -401,14 +425,12 @@ class _SettingsSectionCard extends StatelessWidget {
                   if (section.entries.isNotEmpty)
                     Text(
                       '${section.entries.length} options',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: optionsStyle,
                     ),
                   const Spacer(),
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward,
-                    size: 26,
+                    size: arrowSize,
                   ),
                 ],
               ),
