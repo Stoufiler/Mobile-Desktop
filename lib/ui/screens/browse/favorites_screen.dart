@@ -208,8 +208,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               (crossAxisCount - 1) * spacing) /
           crossAxisCount;
       final ar = _aspectRatio();
-      const titleHeight = 46.0;
-      final childAspectRatio = cellWidth / (cellWidth / ar + titleHeight);
+      final hasSubtitles = _vm.items.any(
+        (item) => (_cardSubtitle(item)?.isNotEmpty ?? false),
+      );
+      final textHeight = hasSubtitles ? 38.0 : 22.0;
+      final childAspectRatio = cellWidth / (cellWidth / ar + textHeight);
 
       return CustomScrollView(
         controller: _scrollController,

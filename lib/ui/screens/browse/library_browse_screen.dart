@@ -366,8 +366,11 @@ class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
               (crossAxisCount - 1) * spacing) /
           crossAxisCount;
       final ar = _gridBaseAspectRatio();
-      const titleHeight = 34.0;
-      final childAspectRatio = cellWidth / (cellWidth / ar + titleHeight);
+      final hasSubtitles = _vm.items.any(
+        (item) => (_cardSubtitle(item)?.isNotEmpty ?? false),
+      );
+      final textHeight = hasSubtitles ? 38.0 : 22.0;
+      final childAspectRatio = cellWidth / (cellWidth / ar + textHeight);
 
       return CustomScrollView(
         controller: _scrollController,
@@ -737,25 +740,34 @@ class _ToolbarButton extends StatefulWidget {
 
 class _ToolbarButtonState extends State<_ToolbarButton> {
   bool _focused = false;
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: _focused ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(
-            widget.icon,
-            size: 28,
-            color: _focused ? Colors.black : Colors.white.withAlpha(128),
+    final showFocusBorder = _focused || _hovered;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        onFocusChange: (f) => setState(() => _focused = f),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: _focused ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: showFocusBorder
+                  ? Border.all(color: Colors.white, width: 1.5)
+                  : null,
+            ),
+            child: Icon(
+              widget.icon,
+              size: 28,
+              color: _focused ? Colors.black : Colors.white.withAlpha(128),
+            ),
           ),
         ),
       ),
@@ -782,31 +794,71 @@ class _AlphaPickerBar extends StatelessWidget {
       child: Row(
         children: _letters.map((letter) {
           final isSelected = selected == letter;
-          return GestureDetector(
+          return _AlphaLetterButton(
+            label: letter.isEmpty ? 'All' : letter,
+            isSelected: isSelected,
             onTap: () => onChanged(letter),
-            child: Container(
-              width: 26,
-              height: 28,
-              alignment: Alignment.center,
-              decoration: isSelected
-                  ? BoxDecoration(
-                      color: Colors.white.withAlpha(26),
-                      borderRadius: BorderRadius.circular(3),
-                    )
-                  : null,
-              child: Text(
-                letter.isEmpty ? 'All' : letter,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected
-                      ? _jellyfinBlue
-                      : Colors.white.withAlpha(102),
-                ),
-              ),
-            ),
           );
         }).toList(),
+      ),
+    );
+  }
+}
+
+class _AlphaLetterButton extends StatefulWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _AlphaLetterButton({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_AlphaLetterButton> createState() => _AlphaLetterButtonState();
+}
+
+class _AlphaLetterButtonState extends State<_AlphaLetterButton> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final showFocusBorder = _hovered || _focused;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        onFocusChange: (f) => setState(() => _focused = f),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 30,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: widget.isSelected ? Colors.white.withAlpha(26) : null,
+              borderRadius: BorderRadius.circular(4),
+              border: showFocusBorder
+                  ? Border.all(color: Colors.white, width: 1.5)
+                  : null,
+            ),
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight:
+                    widget.isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: widget.isSelected
+                    ? _jellyfinBlue
+                    : Colors.white.withAlpha(140),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

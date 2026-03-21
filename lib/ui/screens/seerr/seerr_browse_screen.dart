@@ -168,8 +168,11 @@ class _SeerrBrowseScreenState extends State<SeerrBrowseScreen> {
       final cellWidth = (constraints.maxWidth - gridPadding * 2 -
               (crossAxisCount - 1) * spacing) /
           crossAxisCount;
-      const titleHeight = 46.0;
-      final childAspectRatio = cellWidth / (cellWidth / (2 / 3) + titleHeight);
+      final hasSubtitles = s.items.any(
+        (item) => (_cardSubtitle(item)?.isNotEmpty ?? false),
+      );
+      final textHeight = hasSubtitles ? 38.0 : 22.0;
+      final childAspectRatio = cellWidth / (cellWidth / (2 / 3) + textHeight);
 
       return CustomScrollView(
         controller: _scrollController,

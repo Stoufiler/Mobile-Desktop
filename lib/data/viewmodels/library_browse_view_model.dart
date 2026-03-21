@@ -245,22 +245,13 @@ class LibraryBrowseViewModel extends ChangeNotifier {
         case 'boxsets':
           recursive = false;
           break;
-        case 'books':
-          recursive = false;
-          sortBy = 'IsFolder,SortName';
-          break;
         default:
           collapseBoxSets = false;
           break;
       }
     }
 
-    if (isBookLibrary) {
-      recursive = false;
-      sortBy = 'IsFolder,SortName';
-    }
-
-    if (isMixedContentLibrary) {
+    if (isBookLibrary || isHomeVideosLibrary || isMixedContentLibrary) {
       recursive = false;
       sortBy = 'IsFolder,SortName';
     }
@@ -523,12 +514,22 @@ class LibraryBrowseViewModel extends ChangeNotifier {
       _collectionType == 'books' ||
       (includeItemTypes != null && includeItemTypes!.contains('Book'));
 
+    bool get isHomeVideosLibrary =>
+      !isGenreBrowse &&
+      includeItemTypes == null &&
+      _collectionType == 'homevideos';
+
   bool get isMixedContentLibrary =>
       !isGenreBrowse &&
       includeItemTypes == null &&
-      _collectionType == null;
+      (_collectionType == null ||
+        _collectionType!.isEmpty ||
+        _collectionType == 'mixed');
 
   bool isNavigableFolder(AggregatedItem item) {
+    final isFolder = item.rawData['IsFolder'] as bool? ?? false;
+    if (isFolder) return true;
+
     final type = item.type;
     return type == 'Folder' || type == 'CollectionFolder' || type == 'UserView';
   }
