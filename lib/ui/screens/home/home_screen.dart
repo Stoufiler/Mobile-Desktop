@@ -16,6 +16,7 @@ import '../../../data/services/background_service.dart';
 import '../../../data/services/media_server_client_factory.dart';
 import '../../../preference/user_preferences.dart';
 import '../../../util/platform_detection.dart';
+import '../../navigation/app_router.dart';
 import '../../navigation/destinations.dart';
 import '../../../data/models/media_bar_state.dart';
 import '../../../data/viewmodels/media_bar_view_model.dart';
@@ -292,9 +293,15 @@ class _ContentRows extends StatefulWidget {
   State<_ContentRows> createState() => _ContentRowsState();
 }
 
-class _ContentRowsState extends State<_ContentRows> {
+class _ContentRowsState extends State<_ContentRows>
+    with WidgetsBindingObserver {
   final _scrollController = ScrollController();
   Timer? _previewDelayTimer;
+  Timer? _previewStopTimer;
+  Player? _previewPlayer;
+  VideoController? _previewController;
+  int _previewRequestId = 0;
+  bool _previewReady = false;
   double _scrollOffset = 0;
   double _previewStartScrollOffset = 0;
   bool _isScrolledToTop = true;
@@ -308,14 +315,32 @@ class _ContentRowsState extends State<_ContentRows> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addObserver(this);
+    appRouter.routerDelegate.addListener(_onRouteChanged);
   }
 
   @override
   void dispose() {
+    appRouter.routerDelegate.removeListener(_onRouteChanged);
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _previewDelayTimer?.cancel();
+    _disposeSharedPreview();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _finishSharedPreview();
+    }
+  }
+
+  void _onRouteChanged() {
+    final path = appRouter.routerDelegate.currentConfiguration.uri.path;
+    if (!path.startsWith(Destinations.home)) {
+      _finishSharedPreview();
+    }
   }
 
   static bool _supportsEpisodePreview(AggregatedItem item) {
@@ -347,14 +372,19 @@ class _ContentRowsState extends State<_ContentRows> {
     }
 
     final previewKey = _previewKeyFor(item);
+    if (_activePreviewKey == previewKey) return;
     _previewDelayTimer?.cancel();
-    _previewDelayTimer = Timer(delay, () {
+    _previewDelayTimer = Timer(delay, () async {
       if (!mounted) {
         return;
       }
 
       _previewStartScrollOffset = _scrollController.offset;
-      setState(() => _activePreviewKey = previewKey);
+      setState(() {
+        _activePreviewKey = previewKey;
+        _previewReady = false;
+      });
+      await _startSharedPreview(item, previewKey);
     });
   }
 
@@ -362,15 +392,224 @@ class _ContentRowsState extends State<_ContentRows> {
     final previewKey = _previewKeyFor(item);
     _previewDelayTimer?.cancel();
     if (_activePreviewKey == previewKey && mounted) {
-      setState(() => _activePreviewKey = null);
+      _finishSharedPreview();
     }
   }
 
-  void _clearPreview() {
+  void _finishSharedPreview() {
     _previewDelayTimer?.cancel();
-    if (_activePreviewKey != null && mounted) {
-      setState(() => _activePreviewKey = null);
+    _previewStopTimer?.cancel();
+    _previewRequestId++;
+    _previewPlayer?.stop();
+
+    if (_activePreviewKey != null || _previewReady) {
+      if (mounted) {
+        setState(() {
+          _activePreviewKey = null;
+          _previewReady = false;
+        });
+      } else {
+        _activePreviewKey = null;
+        _previewReady = false;
+      }
     }
+  }
+
+  void _disposeSharedPreview() {
+    _previewDelayTimer?.cancel();
+    _previewStopTimer?.cancel();
+    _previewPlayer?.stop();
+    _previewPlayer?.dispose();
+    _previewPlayer = null;
+    _previewController = null;
+  }
+
+  Future<void> _startSharedPreview(AggregatedItem item, String previewKey) async {
+    final requestId = ++_previewRequestId;
+
+    _previewStopTimer?.cancel();
+    _previewPlayer?.stop();
+
+    try {
+      final client = _clientForItem(item);
+      final target = await _resolvePreviewTargetItem(client, item);
+      if (!mounted || target == null || requestId != _previewRequestId || _activePreviewKey != previewKey) {
+        return;
+      }
+
+      final player = _ensureSharedPreviewPlayer();
+      final seekPosition = _previewSeekPosition(target);
+
+      await player.setVolume(widget.prefs.get(UserPreferences.previewAudioEnabled) ? 100 : 0);
+      if (!mounted || requestId != _previewRequestId || _activePreviewKey != previewKey) {
+        return;
+      }
+
+      await player.open(Media(_buildPreviewUrl(client, target, seekPosition)));
+      if (!mounted || requestId != _previewRequestId || _activePreviewKey != previewKey) {
+        return;
+      }
+
+      await player.setPlaylistMode(PlaylistMode.loop);
+      if (!mounted || requestId != _previewRequestId || _activePreviewKey != previewKey) {
+        return;
+      }
+
+      _previewStopTimer = Timer(const Duration(seconds: 30), () {
+        if (requestId == _previewRequestId && _activePreviewKey == previewKey) {
+          _finishSharedPreview();
+        }
+      });
+
+      if (mounted && requestId == _previewRequestId && _activePreviewKey == previewKey) {
+        setState(() => _previewReady = true);
+      }
+    } catch (_) {
+      if (mounted && requestId == _previewRequestId && _activePreviewKey == previewKey) {
+        _finishSharedPreview();
+      }
+    }
+  }
+
+  Player _ensureSharedPreviewPlayer() {
+    final existing = _previewPlayer;
+    if (existing != null) {
+      return existing;
+    }
+
+    final player = Player(
+      configuration: const PlayerConfiguration(
+        libass: false,
+      ),
+    );
+    final platform = player.platform;
+    if (platform is NativePlayer) {
+      platform.setProperty('network-timeout', '30');
+    }
+    _previewPlayer = player;
+    _previewController = VideoController(player);
+    return player;
+  }
+
+  Future<AggregatedItem?> _resolvePreviewTargetItem(
+    MediaServerClient client,
+    AggregatedItem item,
+  ) async {
+    try {
+      String targetId = item.id;
+      Map<String, dynamic> fallbackRawData = item.rawData;
+
+      if (item.type == 'Series') {
+        final seasonsData = await client.itemsApi.getSeasons(item.id);
+        final seasons = (seasonsData['Items'] as List?)
+                ?.cast<Map<String, dynamic>>()
+                .toList() ??
+            const <Map<String, dynamic>>[];
+        if (seasons.isEmpty) {
+          return null;
+        }
+
+        seasons.sort((a, b) =>
+            ((a['IndexNumber'] as int?) ?? 1 << 20)
+                .compareTo((b['IndexNumber'] as int?) ?? 1 << 20));
+
+        final firstSeasonId = seasons.first['Id'] as String?;
+        if (firstSeasonId == null || firstSeasonId.isEmpty) {
+          return null;
+        }
+
+        final episodesData = await client.itemsApi.getEpisodes(
+          item.id,
+          seasonId: firstSeasonId,
+        );
+        final episodes = (episodesData['Items'] as List?)
+                ?.cast<Map<String, dynamic>>()
+                .toList() ??
+            const <Map<String, dynamic>>[];
+        if (episodes.isEmpty) {
+          return null;
+        }
+
+        episodes.sort((a, b) =>
+            ((a['IndexNumber'] as int?) ?? 1 << 20)
+                .compareTo((b['IndexNumber'] as int?) ?? 1 << 20));
+
+        final first = episodes.first;
+        final firstId = first['Id'] as String?;
+        if (firstId == null || firstId.isEmpty) {
+          return null;
+        }
+        targetId = firstId;
+        fallbackRawData = first;
+      }
+
+      try {
+        final itemData = await client.itemsApi.getItem(targetId);
+        return AggregatedItem(
+          id: targetId,
+          serverId: item.serverId,
+          rawData: itemData,
+        );
+      } catch (_) {
+        return AggregatedItem(
+          id: targetId,
+          serverId: item.serverId,
+          rawData: fallbackRawData,
+        );
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Duration _previewSeekPosition(AggregatedItem item) {
+    final resume = _playbackPositionFromRaw(item);
+    if (resume != null && resume > Duration.zero) {
+      return resume;
+    }
+
+    return const Duration(minutes: 3);
+  }
+
+  Duration? _playbackPositionFromRaw(AggregatedItem item) {
+    final userData = item.rawData['UserData'];
+    if (userData is! Map) {
+      return item.playbackPosition;
+    }
+
+    final rawTicks = userData['PlaybackPositionTicks'];
+    if (rawTicks is num && rawTicks > 0) {
+      return Duration(microseconds: rawTicks.toInt() ~/ 10);
+    }
+
+    return item.playbackPosition;
+  }
+
+  String _buildPreviewUrl(
+    MediaServerClient client,
+    AggregatedItem item,
+    Duration startPosition,
+  ) {
+    final mediaSourceId = item.mediaSources.isNotEmpty
+        ? item.mediaSources.first['Id'] as String?
+        : null;
+    final startTicks = startPosition.inMicroseconds * 10;
+    final params = <String, String>{
+      'Static': 'false',
+      'videoCodec': 'h264',
+      'audioCodec': 'aac',
+      'maxVideoBitDepth': '8',
+      'audioBitRate': '128000',
+      'audioChannels': '2',
+      'subtitleMethod': 'Drop',
+      if (startTicks > 0) 'StartTimeTicks': '$startTicks',
+      if (mediaSourceId != null) 'MediaSourceId': mediaSourceId,
+      if (client.accessToken != null) 'ApiKey': client.accessToken!,
+    };
+
+    return Uri.parse('${client.baseUrl}/Videos/${item.id}/stream')
+        .replace(queryParameters: params)
+        .toString();
   }
 
   void _onScroll() {
@@ -384,7 +623,7 @@ class _ContentRowsState extends State<_ContentRows> {
     if (_activePreviewKey != null) {
       final scrollDelta = (offset - _previewStartScrollOffset).abs();
       if (scrollDelta > _previewScrollThreshold) {
-        _clearPreview();
+        _finishSharedPreview();
         return;
       }
     }
@@ -538,7 +777,7 @@ class _ContentRowsState extends State<_ContentRows> {
                     _schedulePreview(item, delay: Duration.zero);
                   },
                   onTap: () {
-                    _clearPreview();
+                    _finishSharedPreview();
                     if (row.rowType == HomeRowType.libraryTiles) {
                       _navigateToLibrary(context, item);
                     } else {
@@ -555,20 +794,8 @@ class _ContentRowsState extends State<_ContentRows> {
                   card: card,
                   width: width,
                   aspectRatio: ar,
-                  active: _activePreviewKey == previewKey,
-                  item: item,
-                  previewAudioEnabled:
-                      widget.prefs.get(UserPreferences.previewAudioEnabled),
-                  resolveClient: _clientForItem,
-                  onFinished: () {
-                    if (!mounted) {
-                      return;
-                    }
-
-                    if (_activePreviewKey == previewKey) {
-                      setState(() => _activePreviewKey = null);
-                    }
-                  },
+                  showVideo: _activePreviewKey == previewKey && _previewReady,
+                  controller: _previewController,
                 );
               }).toList();
               return LibraryRow(
@@ -770,26 +997,20 @@ class _PreviewCardShell extends StatelessWidget {
   final Widget card;
   final double width;
   final double aspectRatio;
-  final bool active;
-  final AggregatedItem item;
-  final bool previewAudioEnabled;
-  final MediaServerClient Function(AggregatedItem item) resolveClient;
-  final VoidCallback onFinished;
+  final bool showVideo;
+  final VideoController? controller;
 
   const _PreviewCardShell({
     required this.card,
     required this.width,
     required this.aspectRatio,
-    required this.active,
-    required this.item,
-    required this.previewAudioEnabled,
-    required this.resolveClient,
-    required this.onFinished,
+    required this.showVideo,
+    required this.controller,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (!active) {
+    if (!showVideo || controller == null) {
       return card;
     }
 
@@ -799,273 +1020,29 @@ class _PreviewCardShell extends StatelessWidget {
         children: [
           card,
           Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: SizedBox(
-              height: width / aspectRatio,
-              child: IgnorePointer(
-                child: _CardPreviewPlayer(
-                  item: item,
-                  previewAudioEnabled: previewAudioEnabled,
-                  resolveClient: resolveClient,
-                  onFinished: onFinished,
+              left: 0,
+              right: 0,
+              top: 0,
+              child: SizedBox(
+                height: width / aspectRatio,
+                child: IgnorePointer(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: ColoredBox(
+                      color: Colors.black,
+                      child: Video(
+                        controller: controller!,
+                        controls: NoVideoControls,
+                        fit: BoxFit.cover,
+                        pauseUponEnteringBackgroundMode: false,
+                        fill: Colors.black,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CardPreviewPlayer extends StatefulWidget {
-  final AggregatedItem item;
-  final bool previewAudioEnabled;
-  final MediaServerClient Function(AggregatedItem item) resolveClient;
-  final VoidCallback onFinished;
-
-  const _CardPreviewPlayer({
-    required this.item,
-    required this.previewAudioEnabled,
-    required this.resolveClient,
-    required this.onFinished,
-  });
-
-  @override
-  State<_CardPreviewPlayer> createState() => _CardPreviewPlayerState();
-}
-
-class _CardPreviewPlayerState extends State<_CardPreviewPlayer> {
-  Player? _player;
-  VideoController? _controller;
-  Timer? _stopTimer;
-  Timer? _seekTimer;
-  StreamSubscription<bool>? _playbackStreamSub;
-
-  @override
-  void initState() {
-    super.initState();
-    _initPreview();
-  }
-
-  @override
-  void dispose() {
-    _stopTimer?.cancel();
-    _seekTimer?.cancel();
-    _playbackStreamSub?.cancel();
-    _player?.stop();
-    _player?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _initPreview() async {
-    try {
-      final client = widget.resolveClient(widget.item);
-      final target = await _resolveTargetItem(client, widget.item);
-      if (!mounted || target == null) {
-        widget.onFinished();
-        return;
-      }
-
-      final player = Player(
-        configuration: const PlayerConfiguration(
-          libass: false,
-        ),
-      );
-      final platform = player.platform;
-      if (platform is NativePlayer) {
-        platform.setProperty('network-timeout', '30');
-      }
-      final controller = VideoController(player);
-
-      final seekPosition = _previewSeekPosition(target);
-      await player.setVolume(widget.previewAudioEnabled ? 100 : 0);
-      await player.open(Media(_buildPreviewUrl(client, target, seekPosition)));
-
-      if (seekPosition > Duration.zero) {
-        _seekTimer?.cancel();
-        _seekTimer = Timer(const Duration(milliseconds: 600), () {
-          if (!mounted) {
-            return;
-          }
-          player.seek(seekPosition);
-        });
-      }
-
-      if (!mounted) {
-        player.stop();
-        player.dispose();
-        return;
-      }
-
-      _player = player;
-      _controller = controller;
-      _stopTimer = Timer(const Duration(seconds: 30), widget.onFinished);
-
-      _playbackStreamSub = player.stream.completed.listen((completed) {
-        if (completed && mounted && (_stopTimer?.isActive ?? false)) {
-          widget.onFinished();
-        }
-      });
-
-      setState(() {});
-    } catch (_) {
-      if (mounted) {
-        widget.onFinished();
-      }
-    }
-  }
-
-  Future<AggregatedItem?> _resolveTargetItem(
-    MediaServerClient client,
-    AggregatedItem item,
-  ) async {
-    try {
-      String targetId = item.id;
-      Map<String, dynamic> fallbackRawData = item.rawData;
-
-      if (item.type == 'Series') {
-        final seasonsData = await client.itemsApi.getSeasons(item.id);
-        final seasons = (seasonsData['Items'] as List?)
-                ?.cast<Map<String, dynamic>>()
-                .toList() ??
-            const <Map<String, dynamic>>[];
-        if (seasons.isEmpty) {
-          return null;
-        }
-
-        seasons.sort((a, b) {
-          final ai = a['IndexNumber'] as int? ?? 1 << 20;
-          final bi = b['IndexNumber'] as int? ?? 1 << 20;
-          return ai.compareTo(bi);
-        });
-
-        final firstSeasonId = seasons.first['Id'] as String?;
-        if (firstSeasonId == null || firstSeasonId.isEmpty) {
-          return null;
-        }
-
-        final episodesData = await client.itemsApi.getEpisodes(
-          item.id,
-          seasonId: firstSeasonId,
-        );
-        final episodes = (episodesData['Items'] as List?)
-                ?.cast<Map<String, dynamic>>()
-                .toList() ??
-            const <Map<String, dynamic>>[];
-        if (episodes.isEmpty) {
-          return null;
-        }
-
-        episodes.sort((a, b) {
-          final ai = a['IndexNumber'] as int? ?? 1 << 20;
-          final bi = b['IndexNumber'] as int? ?? 1 << 20;
-          return ai.compareTo(bi);
-        });
-
-        final first = episodes.first;
-        final firstId = first['Id'] as String?;
-        if (firstId == null || firstId.isEmpty) {
-          return null;
-        }
-        targetId = firstId;
-        fallbackRawData = first;
-      }
-
-      try {
-        final itemData = await client.itemsApi.getItem(targetId);
-        return AggregatedItem(
-          id: targetId,
-          serverId: item.serverId,
-          rawData: itemData,
-        );
-      } catch (_) {
-        return AggregatedItem(
-          id: targetId,
-          serverId: item.serverId,
-          rawData: fallbackRawData,
-        );
-      }
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Duration _previewSeekPosition(AggregatedItem item) {
-    final resume = _playbackPositionFromRaw(item);
-    if (resume != null && resume > Duration.zero) {
-      return resume;
-    }
-
-    return const Duration(minutes: 3);
-  }
-
-  Duration? _playbackPositionFromRaw(AggregatedItem item) {
-    final userData = item.rawData['UserData'];
-    if (userData is! Map) {
-      return item.playbackPosition;
-    }
-
-    final rawTicks = userData['PlaybackPositionTicks'];
-    if (rawTicks is num && rawTicks > 0) {
-      return Duration(microseconds: rawTicks.toInt() ~/ 10);
-    }
-
-    return item.playbackPosition;
-  }
-
-  String _buildPreviewUrl(
-    MediaServerClient client,
-    AggregatedItem item,
-    Duration startPosition,
-  ) {
-    final mediaSourceId = item.mediaSources.isNotEmpty
-        ? item.mediaSources.first['Id'] as String?
-        : null;
-    final startTicks = startPosition.inMicroseconds * 10;
-    final params = <String, String>{
-      'Static': 'false',
-      'videoCodec': 'h264',
-      'audioCodec': 'aac',
-      'maxVideoBitDepth': '8',
-      'audioBitRate': '128000',
-      'audioChannels': '2',
-      'subtitleMethod': 'Drop',
-      if (startTicks > 0) 'StartTimeTicks': '$startTicks',
-      if (mediaSourceId != null) 'MediaSourceId': mediaSourceId,
-      if (client.accessToken != null) 'ApiKey': client.accessToken!,
-    };
-
-    final query = params.entries
-        .map(
-          (entry) =>
-              '${Uri.encodeComponent(entry.key)}=${Uri.encodeComponent(entry.value)}',
-        )
-        .join('&');
-
-    return '${client.baseUrl}/Videos/${item.id}/stream?$query';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    if (controller == null) {
-      return const SizedBox.shrink();
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: ColoredBox(
-        color: Colors.black,
-        child: Video(
-          controller: controller,
-          controls: NoVideoControls,
-          fit: BoxFit.cover,
-          pauseUponEnteringBackgroundMode: false,
-          fill: Colors.black,
-        ),
       ),
     );
   }
