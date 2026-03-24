@@ -28,6 +28,7 @@ import '../../widgets/media_card.dart';
 import '../../widgets/navigation_layout.dart';
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/seasonal_effects.dart';
+import '../../navigation/home_refresh_bus.dart';
 import 'home_view_model.dart';
 
 const _homeBackground = Color(0xFF101528);
@@ -51,7 +52,7 @@ class _HomeShell extends StatefulWidget {
   State<_HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<_HomeShell> {
+class _HomeShellState extends State<_HomeShell> with WidgetsBindingObserver {
   final _backgroundService = GetIt.instance<BackgroundService>();
   final _userPrefs = GetIt.instance<UserPreferences>();
   late final HomeViewModel _viewModel;
@@ -73,6 +74,11 @@ class _HomeShellState extends State<_HomeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    homeRefreshBus.addListener(_onHomeRefreshRequested);
+    if (consumePendingHomeRefresh()) {
+      _viewModel.refresh(preserveExisting: true);
+    }
     _backgroundSub = _backgroundService.backgroundStream.listen((url) {
       if (mounted) setState(() => _backdropUrl = url);
     });
@@ -89,6 +95,8 @@ class _HomeShellState extends State<_HomeShell> {
 
   @override
   void dispose() {
+    homeRefreshBus.removeListener(_onHomeRefreshRequested);
+    WidgetsBinding.instance.removeObserver(this);
     _selectionDebounce?.cancel();
     _backdropDebounce?.cancel();
     _hoverPauseTimer?.cancel();
@@ -101,6 +109,18 @@ class _HomeShellState extends State<_HomeShell> {
 
   void _onViewModelChanged() {
     if (mounted) setState(() {});
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _viewModel.refresh(preserveExisting: true);
+    }
+  }
+
+  void _onHomeRefreshRequested() {
+    if (!mounted) return;
+    _viewModel.refresh(preserveExisting: true);
   }
 
   void _onPrefsChanged() {

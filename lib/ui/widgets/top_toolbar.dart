@@ -16,6 +16,7 @@ import '../../preference/seerr_preferences.dart';
 import '../../preference/user_preferences.dart';
 import '../../util/platform_detection.dart';
 import '../navigation/destinations.dart';
+import '../navigation/home_refresh_bus.dart';
 import 'expandable_icon_button.dart';
 import 'seerr_icons.dart';
 import 'shuffle_options_dialog.dart';
@@ -316,7 +317,14 @@ class _TopToolbarState extends State<TopToolbar> {
                   icon: Icons.home_rounded,
                   label: 'Home',
                   isActive: _isActive(Destinations.home),
-                  onPressed: () => context.go(Destinations.home),
+                  onPressed: () {
+                    if (_isActive(Destinations.home)) {
+                      requestHomeRefresh();
+                      return;
+                    }
+                    requestHomeRefreshAfterNavigation();
+                    context.go(Destinations.home);
+                  },
                 ),
               ),
               _gap(),

@@ -15,6 +15,7 @@ import '../../preference/seerr_preferences.dart';
 import '../../preference/user_preferences.dart';
 import '../../util/platform_detection.dart';
 import '../navigation/destinations.dart';
+import '../navigation/home_refresh_bus.dart';
 import 'seerr_icons.dart';
 import 'shuffle_options_dialog.dart';
 import 'user_menu_dialog.dart';
@@ -320,7 +321,15 @@ class _LeftSidebarState extends State<LeftSidebar> {
                 label: 'Home',
                 showLabel: _showLabels,
                 isActive: _isActive(Destinations.home),
-                onPressed: () { _onNavigate(); context.go(Destinations.home); },
+                onPressed: () {
+                  _onNavigate();
+                  if (_isActive(Destinations.home)) {
+                    requestHomeRefresh();
+                    return;
+                  }
+                  requestHomeRefreshAfterNavigation();
+                  context.go(Destinations.home);
+                },
               ),
               _SidebarItem(
                 icon: Icons.search_rounded,

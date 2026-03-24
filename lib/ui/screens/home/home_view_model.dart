@@ -44,7 +44,7 @@ class HomeViewModel extends ChangeNotifier {
         _mediaBarViewModel = mediaBarViewModel,
         _multiServerRepo = multiServerRepo;
 
-  Future<void> load() async {
+  Future<void> load({bool preserveExisting = false}) async {
     if (_isLoading) return;
     _isLoading = true;
     notifyListeners();
@@ -53,22 +53,25 @@ class HomeViewModel extends ChangeNotifier {
 
     final sections = _prefs.activeHomeSections;
     final merge = _prefs.get(UserPreferences.mergeContinueWatchingNextUp);
-    final placeholders = <HomeRow>[];
-    for (final section in sections) {
-      if (merge && section == HomeSectionType.nextUp) continue;
-      final placeholder = _placeholderForSection(section);
-      if (placeholder != null) {
-        if (merge && section == HomeSectionType.resume) {
-          placeholders.add(placeholder.copyWith(
-            title: 'Continue Watching & Next Up',
-          ));
-        } else {
-          placeholders.add(placeholder);
+
+    if (!preserveExisting || _rows.isEmpty) {
+      final placeholders = <HomeRow>[];
+      for (final section in sections) {
+        if (merge && section == HomeSectionType.nextUp) continue;
+        final placeholder = _placeholderForSection(section);
+        if (placeholder != null) {
+          if (merge && section == HomeSectionType.resume) {
+            placeholders.add(placeholder.copyWith(
+              title: 'Continue Watching & Next Up',
+            ));
+          } else {
+            placeholders.add(placeholder);
+          }
         }
       }
+      _rows = placeholders;
+      notifyListeners();
     }
-    _rows = placeholders;
-    notifyListeners();
 
     final loaded = <HomeRow>[];
     for (final section in sections) {
@@ -104,10 +107,8 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refresh() async {
-    _rows = [];
-    notifyListeners();
-    await load();
+  Future<void> refresh({bool preserveExisting = true}) async {
+    await load(preserveExisting: preserveExisting);
   }
 
   Future<void> loadMoreForRow(int rowIndex) async {
