@@ -6,6 +6,7 @@ class GuideChannel {
   final String name;
   final String? number;
   final String? imageTag;
+  final bool isFavorite;
   final Map<String, dynamic> rawData;
 
   const GuideChannel({
@@ -13,6 +14,7 @@ class GuideChannel {
     required this.name,
     this.number,
     this.imageTag,
+    this.isFavorite = false,
     required this.rawData,
   });
 }
@@ -104,6 +106,9 @@ class LiveTvGuideViewModel extends ChangeNotifier {
 
   List<GuideChannel> get filteredChannels {
     if (_filter == GuideFilter.all) return _channels;
+    if (_filter == GuideFilter.favorites) {
+      return _channels.where((ch) => ch.isFavorite).toList();
+    }
     return _channels.where((ch) {
       final programs = _programsByChannel[ch.id] ?? [];
       return programs.any((p) => _matchesFilter(p));
@@ -112,8 +117,15 @@ class LiveTvGuideViewModel extends ChangeNotifier {
 
   List<GuideProgram> programsForChannel(String channelId) {
     final all = _programsByChannel[channelId] ?? [];
-    if (_filter == GuideFilter.all) return all;
+    if (_filter == GuideFilter.all || _filter == GuideFilter.favorites) return all;
     return all.where(_matchesFilter).toList();
+  }
+
+  GuideChannel? channelForId(String channelId) {
+    for (final channel in _channels) {
+      if (channel.id == channelId) return channel;
+    }
+    return null;
   }
 
   bool _matchesFilter(GuideProgram p) => switch (_filter) {
@@ -124,8 +136,51 @@ class LiveTvGuideViewModel extends ChangeNotifier {
     GuideFilter.news => p.isNews,
     GuideFilter.kids => p.isKids,
     GuideFilter.premiere => p.isPremiere,
-    GuideFilter.favorites => false,
+    GuideFilter.favorites => true,
   };
+
+  Future<void> toggleChannelFavorite(String channelId) async {
+    final index = _channels.indexWhere((c) => c.id == channelId);
+    if (index < 0) return;
+
+    final current = _channels[index];
+    final next = !current.isFavorite;
+
+    final optimisticRaw = Map<String, dynamic>.from(current.rawData);
+    final userData = Map<String, dynamic>.from(
+      (optimisticRaw['UserData'] as Map?) ?? const <String, dynamic>{},
+    );
+    userData['IsFavorite'] = next;
+    optimisticRaw['UserData'] = userData;
+
+    final updated = GuideChannel(
+      id: current.id,
+      name: current.name,
+      number: current.number,
+      imageTag: current.imageTag,
+      isFavorite: next,
+      rawData: optimisticRaw,
+    );
+
+    final channels = List<GuideChannel>.from(_channels);
+    channels[index] = updated;
+    _channels = channels;
+    notifyListeners();
+
+    try {
+      if (next) {
+        await _client.userLibraryApi.markFavorite(channelId);
+      } else {
+        await _client.userLibraryApi.unmarkFavorite(channelId);
+      }
+    } catch (_) {
+      final reverted = List<GuideChannel>.from(_channels);
+      reverted[index] = current;
+      _channels = reverted;
+      notifyListeners();
+      rethrow;
+    }
+  }
 
   Future<void> load() async {
     _state = GuideState.loading;
@@ -194,7 +249,7 @@ class LiveTvGuideViewModel extends ChangeNotifier {
     final response = await _client.liveTvApi.getChannels(
       sortBy: 'SortName',
       sortOrder: 'Ascending',
-      fields: 'ImageTags',
+      fields: 'ImageTags,UserData',
       enableTotalRecordCount: false,
       userId: _client.userId,
     );
@@ -205,6 +260,7 @@ class LiveTvGuideViewModel extends ChangeNotifier {
         name: raw['Name'] as String? ?? '',
         number: raw['ChannelNumber'] as String?,
         imageTag: (raw['ImageTags'] as Map?)?['Primary'] as String?,
+        isFavorite: ((raw['UserData'] as Map?)?['IsFavorite'] == true),
         rawData: raw,
       );
     }).toList();

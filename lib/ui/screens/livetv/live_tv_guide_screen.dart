@@ -474,6 +474,9 @@ class _LiveTvGuideScreenState extends State<LiveTvGuideScreen> {
   }
 
   void _showProgramDetails(GuideProgram program) {
+    final channel = _vm.channelForId(program.channelId);
+    final isFavoriteChannel = channel?.isFavorite ?? false;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -512,6 +515,36 @@ class _LiveTvGuideScreenState extends State<LiveTvGuideScreen> {
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: channel == null
+                ? null
+                : () async {
+                    try {
+                      await _vm.toggleChannelFavorite(program.channelId);
+                      if (!context.mounted) return;
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isFavoriteChannel
+                                ? 'Removed from favorite channels'
+                                : 'Added to favorite channels',
+                          ),
+                        ),
+                      );
+                    } catch (_) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Failed to update favorite channel'),
+                        ),
+                      );
+                    }
+                  },
+            child: Text(
+              isFavoriteChannel ? 'Unfavorite Channel' : 'Favorite Channel',
+            ),
+          ),
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
