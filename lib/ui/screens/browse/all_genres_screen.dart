@@ -254,6 +254,8 @@ class _AllGenresScreenState extends State<AllGenresScreen> {
           final genre = _genres[index];
           return GenreGridCard(
             genre: genre,
+            focusColor: Color(_prefs.get(UserPreferences.focusColor).colorValue),
+            cardFocusExpansion: _prefs.get(UserPreferences.cardFocusExpansion),
             onTap: () => context.push(Destinations.genre(genre.name, genreId: genre.id)),
             onHover: isMobile ? null : (hovering) {
               if (hovering && genre.backdropUrl != null) {

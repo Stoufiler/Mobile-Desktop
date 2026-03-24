@@ -791,10 +791,10 @@ class _ContentRowsState extends State<_ContentRows>
                 return LibraryRow(title: row.title, children: const []);
               }
               if (row.rowType == HomeRowType.liveTv) {
-                return _buildLiveTvRow(row, focusColor);
+                return _buildLiveTvRow(row, focusColor, cardExpansion);
               }
               if (row.rowType == HomeRowType.libraryTilesSmall) {
-                return _buildLibraryButtonsRow(row, focusColor);
+                return _buildLibraryButtonsRow(row, focusColor, cardExpansion);
               }
               double maxCardHeight = 0;
               final useLandscape = row.rowType == HomeRowType.resume ||
@@ -927,7 +927,7 @@ class _ContentRowsState extends State<_ContentRows>
     );
   }
 
-  Widget _buildLiveTvRow(HomeRow row, Color focusColor) {
+  Widget _buildLiveTvRow(HomeRow row, Color focusColor, bool cardExpansion) {
     return LibraryRow(
       title: row.title,
       rowHeight: 140,
@@ -936,31 +936,39 @@ class _ContentRowsState extends State<_ContentRows>
           icon: Icons.tv_rounded,
           label: 'Guide',
           focusColor: focusColor,
+          cardFocusExpansion: cardExpansion,
           onTap: () => context.push(Destinations.liveTvGuide),
         ),
         GridButtonCard(
           icon: Icons.fiber_manual_record_rounded,
           label: 'Recordings',
           focusColor: focusColor,
+          cardFocusExpansion: cardExpansion,
           onTap: () => context.push(Destinations.liveTvRecordings),
         ),
         GridButtonCard(
           icon: Icons.schedule_rounded,
           label: 'Schedule',
           focusColor: focusColor,
+          cardFocusExpansion: cardExpansion,
           onTap: () => context.push(Destinations.liveTvSchedule),
         ),
         GridButtonCard(
           icon: Icons.movie_creation,
           label: 'Series',
           focusColor: focusColor,
+          cardFocusExpansion: cardExpansion,
           onTap: () => context.push(Destinations.liveTvSeriesRecordings),
         ),
       ],
     );
   }
 
-  Widget _buildLibraryButtonsRow(HomeRow row, Color focusColor) {
+  Widget _buildLibraryButtonsRow(
+    HomeRow row,
+    Color focusColor,
+    bool cardExpansion,
+  ) {
     return LibraryRow(
       title: row.title,
       rowHeight: 140,
@@ -971,6 +979,7 @@ class _ContentRowsState extends State<_ContentRows>
           icon: icon,
           label: item.name,
           focusColor: focusColor,
+          cardFocusExpansion: cardExpansion,
           onTap: () => _navigateToLibrary(context, item),
         );
       }).toList(),

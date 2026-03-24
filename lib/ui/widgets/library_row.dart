@@ -35,7 +35,7 @@ class LibraryRow extends StatelessWidget {
           ),
         ),
         SizedBox(
-          height: rowHeight ?? 220,
+          height: (rowHeight ?? 220) + 10,
           child: children.isEmpty
               ? Center(
                   child: Text(
@@ -50,7 +50,7 @@ class LibraryRow extends StatelessWidget {
                 )
               : ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(20, 5, 20, 5),
                   itemCount: children.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (_, i) => children[i],

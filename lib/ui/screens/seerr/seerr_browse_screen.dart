@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../data/repositories/seerr_repository.dart';
 import '../../../data/services/seerr/seerr_api_models.dart';
 import '../../../data/viewmodels/seerr_browse_view_model.dart';
+import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/media_card.dart';
@@ -193,6 +195,11 @@ class _SeerrBrowseScreenState extends State<SeerrBrowseScreen> {
                 ),
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final item = s.items[index];
+                  final focusColor = GetIt.instance<UserPreferences>()
+                    .get(UserPreferences.focusColor).colorValue;
+                  final cardExpansion = GetIt.instance<UserPreferences>()
+                      .get(UserPreferences.cardFocusExpansion);
+                  final resolvedFocusColor = Color(focusColor);
                   return MediaCard(
                     title: item.displayTitle,
                     subtitle: _cardSubtitle(item),
@@ -202,6 +209,8 @@ class _SeerrBrowseScreenState extends State<SeerrBrowseScreen> {
                             : null,
                     width: double.infinity,
                     aspectRatio: 2 / 3,
+                  focusColor: resolvedFocusColor,
+                    cardFocusExpansion: cardExpansion,
                     onFocus:
                         isMobile
                             ? null
@@ -491,27 +500,34 @@ class _ToolbarButton extends StatefulWidget {
   State<_ToolbarButton> createState() => _ToolbarButtonState();
 }
 
-class _ToolbarButtonState extends State<_ToolbarButton> {
-  bool _focused = false;
+class _ToolbarButtonState extends State<_ToolbarButton> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            color: _focused ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(
-            widget.icon,
-            size: 28,
-            color: _focused ? Colors.black : Colors.white.withAlpha(128),
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (f) => setFocused(f),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: focused ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: showFocusBorder ? Border.all(color: focusColor, width: 1.5) : null,
+            ),
+            child: Icon(
+              widget.icon,
+              size: 28,
+              color: focused ? Colors.black : Colors.white.withAlpha(128),
+            ),
           ),
         ),
       ),

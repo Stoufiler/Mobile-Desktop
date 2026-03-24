@@ -128,7 +128,7 @@ class _LibraryViewScreenState extends State<LibraryViewScreen> {
 
     final posterSize = _prefs.get(UserPreferences.posterSize);
     final watchedBehavior = _prefs.get(UserPreferences.watchedIndicatorBehavior);
-    final focusColor = Color(_prefs.get(UserPreferences.focusColor).colorValue);
+  final focusColor = Color(_prefs.get(UserPreferences.focusColor).colorValue);
     final cardExpansion = _prefs.get(UserPreferences.cardFocusExpansion);
 
     return ListView.builder(

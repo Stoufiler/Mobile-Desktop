@@ -3,6 +3,8 @@ import 'package:get_it/get_it.dart';
 import 'package:server_core/server_core.dart';
 
 import '../../../data/viewmodels/series_recordings_view_model.dart';
+import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../widgets/navigation_layout.dart';
 
 class LiveTvSeriesRecordingsScreen extends StatefulWidget {
@@ -287,75 +289,82 @@ class _SeriesTimerCard extends StatefulWidget {
   State<_SeriesTimerCard> createState() => _SeriesTimerCardState();
 }
 
-class _SeriesTimerCardState extends State<_SeriesTimerCard> {
-  bool _focused = false;
+class _SeriesTimerCardState extends State<_SeriesTimerCard> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final scale = _focused ? 1.08 : 1.0;
-    final alpha = _focused ? 1.0 : 0.75;
+    final cardExpansion =
+        GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
+    final scale = cardExpansion && showFocusBorder ? 1.08 : 1.0;
+    final alpha = showFocusBorder ? 1.0 : 0.75;
+    final focusColor = Color(
+      GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue,
+    );
 
-    return Focus(
-      onFocusChange: (focused) {
-        setState(() => _focused = focused);
-        if (focused) widget.onFocused();
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: scale,
-          duration: const Duration(milliseconds: 150),
-          child: Opacity(
-            opacity: alpha,
-            child: SizedBox(
-              width: 200,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 200,
-                    height: 112,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(4),
-                      border: _focused
-                          ? Border.all(
-                              color: Colors.white.withValues(alpha: 0.3),
-                            )
-                          : null,
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.fiber_smart_record,
-                        size: 48,
-                        color: _focused
-                            ? Colors.white.withValues(alpha: 0.4)
-                            : Colors.white.withValues(alpha: 0.15),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (focused) {
+          setFocused(focused);
+          if (focused) widget.onFocused();
+        },
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 150),
+            child: Opacity(
+              opacity: alpha,
+              child: SizedBox(
+                width: 200,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 200,
+                      height: 112,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(4),
+                        border: showFocusBorder
+                            ? Border.all(color: focusColor, width: 1.5)
+                            : null,
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.fiber_smart_record,
+                          size: 48,
+                          color: showFocusBorder
+                              ? Colors.white.withValues(alpha: 0.4)
+                              : Colors.white.withValues(alpha: 0.15),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    widget.timer.name,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (widget.timer.subtitle.isNotEmpty)
+                    const SizedBox(height: 5),
                     Text(
-                      widget.timer.subtitle,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.5),
+                      widget.timer.name,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                ],
+                    if (widget.timer.subtitle.isNotEmpty)
+                      Text(
+                        widget.timer.subtitle,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.6),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

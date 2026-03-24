@@ -8,6 +8,8 @@ import '../../../data/repositories/seerr_repository.dart';
 import '../../../data/services/seerr/seerr_api_models.dart';
 import '../../../data/viewmodels/seerr_media_detail_view_model.dart';
 import '../../../preference/seerr_preferences.dart';
+import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/library_row.dart';
 import '../../widgets/media_card.dart';
@@ -504,6 +506,10 @@ class _SeerrMediaDetailScreenState
   }
 
   Widget _buildRelatedRow(String title, List<SeerrDiscoverItem> items) {
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    final cardExpansion =
+        GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
     return LibraryRow(
       title: title,
       rowHeight: 236,
@@ -516,6 +522,8 @@ class _SeerrMediaDetailScreenState
                     : null,
                 width: 130,
                 aspectRatio: 2 / 3,
+                focusColor: focusColor,
+                cardFocusExpansion: cardExpansion,
                 onTap: () {
                   final mediaType = item.mediaType ?? 'movie';
                   context.push(
@@ -738,37 +746,49 @@ class _CastCard extends StatefulWidget {
   State<_CastCard> createState() => _CastCardState();
 }
 
-class _CastCardState extends State<_CastCard> {
-  bool _focused = false;
+class _CastCardState extends State<_CastCard> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
     final m = widget.member;
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
     return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
+      onFocusChange: (f) => setFocused(f),
       child: GestureDetector(
         onTap: widget.onTap,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
+          onEnter: (_) => setHovered(true),
+          onExit: (_) => setHovered(false),
           child: AnimatedScale(
-            scale: _focused ? 1.05 : 1.0,
+            scale: showFocusBorder ? 1.05 : 1.0,
             duration: const Duration(milliseconds: 150),
             child: SizedBox(
               width: 90,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.grey[800],
-                    backgroundImage: m.profilePath != null
-                        ? CachedNetworkImageProvider(
-                            '$_tmdbProfileBase${m.profilePath}')
-                        : null,
-                    child: m.profilePath == null
-                        ? const Icon(Icons.person,
-                            color: Colors.white38, size: 32)
-                        : null,
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: showFocusBorder
+                          ? Border.all(color: focusColor, width: 2)
+                          : null,
+                    ),
+                    child: CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.grey[800],
+                      backgroundImage: m.profilePath != null
+                          ? CachedNetworkImageProvider(
+                              '$_tmdbProfileBase${m.profilePath}')
+                          : null,
+                      child: m.profilePath == null
+                          ? const Icon(Icons.person,
+                              color: Colors.white38, size: 32)
+                          : null,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(

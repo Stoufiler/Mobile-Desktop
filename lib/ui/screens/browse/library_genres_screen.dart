@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:server_core/server_core.dart';
 
 import '../../../data/services/background_service.dart';
+import '../../../preference/user_preferences.dart';
 import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/genre_grid_card.dart';
@@ -31,6 +32,7 @@ class LibraryGenresScreen extends StatefulWidget {
 
 class _LibraryGenresScreenState extends State<LibraryGenresScreen> {
   final _client = GetIt.instance<MediaServerClient>();
+  final _prefs = GetIt.instance<UserPreferences>();
   final _backgroundService = GetIt.instance<BackgroundService>();
   StreamSubscription<String?>? _backgroundSub;
   String? _backdropUrl;
@@ -250,6 +252,8 @@ class _LibraryGenresScreenState extends State<LibraryGenresScreen> {
           final genre = _genres[index];
           return GenreGridCard(
             genre: genre,
+            focusColor: Color(_prefs.get(UserPreferences.focusColor).colorValue),
+            cardFocusExpansion: _prefs.get(UserPreferences.cardFocusExpansion),
             centerTitle: isMusic,
             onTap: () {
               context.push(Destinations.genre(

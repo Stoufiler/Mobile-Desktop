@@ -28,7 +28,7 @@ class UserPreferences extends ChangeNotifier {
 
   static final cardFocusExpansion = Preference(
     key: 'pref_card_focus_expansion',
-    defaultValue: false,
+    defaultValue: true,
   );
 
   static final backdropEnabled = Preference(

@@ -21,6 +21,7 @@ import '../../../data/services/book_reader_service.dart';
 import '../../../data/services/theme_music_service.dart';
 import '../../../data/viewmodels/item_detail_view_model.dart';
 import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../../auth/repositories/user_repository.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/add_to_playlist_dialog.dart';
@@ -2373,64 +2374,69 @@ class _DetailActionButton extends StatefulWidget {
   State<_DetailActionButton> createState() => _DetailActionButtonState();
 }
 
-class _DetailActionButtonState extends State<_DetailActionButton> {
-  bool _hovered = false;
+class _DetailActionButtonState extends State<_DetailActionButton> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
     final isMobile = _isCompact(context);
-    final iconColor =
-        widget.isActive ? (widget.activeColor ?? Colors.white) : Colors.white;
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    final showHighlight = showFocusBorder;
 
     final activeColor = widget.isActive ? widget.activeColor : null;
+    final iconColor = showHighlight
+        ? Colors.black
+        : (widget.isActive ? (widget.activeColor ?? Colors.white) : Colors.white);
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: SizedBox(
-          width: isMobile ? 80 : 96,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: isMobile ? 44 : 52,
-                height: isMobile ? 44 : 52,
-                decoration: BoxDecoration(
-                  color:
-                      activeColor != null
-                          ? activeColor.withValues(
-                            alpha: _hovered ? 0.25 : 0.15,
-                          )
-                          : (_hovered
-                              ? Colors.white.withValues(alpha: 0.15)
-                              : Colors.white.withValues(alpha: 0.08)),
-                  border: Border.all(
-                    color:
-                        activeColor?.withValues(alpha: 0.4) ??
-                        Colors.white.withValues(alpha: 0.15),
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (focused) => setFocused(focused),
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          child: SizedBox(
+            width: isMobile ? 80 : 96,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: isMobile ? 44 : 52,
+                  height: isMobile ? 44 : 52,
+                  decoration: BoxDecoration(
+                    color: showHighlight
+                        ? Colors.white
+                        : activeColor != null
+                            ? activeColor.withValues(alpha: 0.15)
+                            : Colors.white.withValues(alpha: 0.08),
+                    border: Border.all(
+                      color: showHighlight
+                          ? Colors.white
+                          : activeColor?.withValues(alpha: 0.4) ??
+                              focusColor.withValues(alpha: 0.35),
+                    ),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  borderRadius: BorderRadius.circular(14),
+                  child: Icon(
+                    widget.icon,
+                    color: iconColor,
+                    size: isMobile ? 20 : 22,
+                  ),
                 ),
-                child: Icon(
-                  widget.icon,
-                  color: iconColor,
-                  size: isMobile ? 20 : 22,
+                const SizedBox(height: 6),
+                Text(
+                  widget.label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                widget.label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2471,9 +2477,10 @@ class _CastRow extends StatelessWidget {
     final avatarRadius = isMobile ? 35.0 : 45.0;
 
     return SizedBox(
-      height: isMobile ? 140 : 160,
+      height: isMobile ? 158 : 178,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(4, 10, 4, 4),
         itemCount: people.length,
         separatorBuilder: (_, __) => SizedBox(width: isMobile ? 12 : 16),
         itemBuilder: (context, index) {
@@ -2492,52 +2499,116 @@ class _CastRow extends StatelessWidget {
             );
           }
 
-          return GestureDetector(
-            onTap:
-                personId != null
-                    ? () => context.push(
+          return _CastPersonCard(
+            cardWidth: cardWidth,
+            avatarRadius: avatarRadius,
+            name: name,
+            role: role,
+            imageUrl: imageUrl,
+            isMobile: isMobile,
+            onTap: personId != null
+                ? () => context.push(
                       Destinations.item(personId, serverId: serverId),
                     )
-                    : null,
+                : null,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CastPersonCard extends StatefulWidget {
+  final double cardWidth;
+  final double avatarRadius;
+  final String name;
+  final String? role;
+  final String? imageUrl;
+  final bool isMobile;
+  final VoidCallback? onTap;
+
+  const _CastPersonCard({
+    required this.cardWidth,
+    required this.avatarRadius,
+    required this.name,
+    required this.role,
+    required this.imageUrl,
+    required this.isMobile,
+    this.onTap,
+  });
+
+  @override
+  State<_CastPersonCard> createState() => _CastPersonCardState();
+}
+
+class _CastPersonCardState extends State<_CastPersonCard> with FocusStateMixin {
+
+  @override
+  Widget build(BuildContext context) {
+    final cardExpansion =
+        GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+
+    return MouseRegion(
+      cursor: widget.onTap != null ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (focused) => setFocused(focused),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: cardExpansion && showFocusBorder ? 1.05 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            alignment: Alignment.topCenter,
             child: SizedBox(
-              width: cardWidth,
+              width: widget.cardWidth,
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: avatarRadius,
-                    backgroundColor: Colors.white.withValues(alpha: 0.1),
-                    backgroundImage:
-                        imageUrl != null
-                            ? CachedNetworkImageProvider(imageUrl)
-                            : null,
-                    child:
-                        imageUrl == null
-                            ? Icon(
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: showFocusBorder
+                          ? Border.all(color: focusColor, width: 1.5)
+                          : null,
+                    ),
+                    child: CircleAvatar(
+                      radius: widget.avatarRadius,
+                      backgroundColor: Colors.white.withValues(alpha: 0.1),
+                      backgroundImage: widget.imageUrl != null
+                          ? CachedNetworkImageProvider(widget.imageUrl!)
+                          : null,
+                      child: widget.imageUrl == null
+                          ? Icon(
                               Icons.person,
                               color: Colors.white54,
-                              size: isMobile ? 24 : 32,
+                              size: widget.isMobile ? 24 : 32,
                             )
-                            : null,
+                          : null,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    name,
+                    widget.name,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: isMobile ? 11 : null,
-                    ),
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: widget.isMobile ? 11 : null,
+                        ),
                     textAlign: TextAlign.center,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (role != null)
+                  if (widget.role != null)
                     Text(
-                      role,
+                      widget.role!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: isMobile ? 10 : 11,
-                      ),
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: widget.isMobile ? 10 : 11,
+                          ),
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -2545,8 +2616,8 @@ class _CastRow extends StatelessWidget {
                 ],
               ),
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -2566,13 +2637,15 @@ class _SimilarRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
+    final cardExpansion = prefs.get(UserPreferences.cardFocusExpansion);
     final isMobile = _isCompact(context);
     final cardWidth = isMobile ? 120.0 : 150.0;
 
     return SizedBox(
-      height: isMobile ? 210 : 260,
+      height: isMobile ? 228 : 282,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(6, 10, 6, 4),
         itemCount: items.length,
         separatorBuilder: (_, __) => SizedBox(width: isMobile ? 8 : 12),
         itemBuilder: (context, index) {
@@ -2590,6 +2663,8 @@ class _SimilarRow extends StatelessWidget {
                     : null,
             width: cardWidth,
             aspectRatio: ar,
+            focusColor: Color(prefs.get(UserPreferences.focusColor).colorValue),
+            cardFocusExpansion: cardExpansion,
             isFavorite: item.isFavorite,
             isPlayed: item.isPlayed,
             playedPercentage: item.playedPercentage,
@@ -2620,13 +2695,15 @@ class _FeaturesRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
+    final cardExpansion = prefs.get(UserPreferences.cardFocusExpansion);
     final isMobile = _isCompact(context);
     final cardWidth = isMobile ? 140.0 : 170.0;
 
     return SizedBox(
-      height: isMobile ? 220 : 270,
+      height: isMobile ? 230 : 280,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
         itemCount: items.length,
         separatorBuilder: (_, __) => SizedBox(width: isMobile ? 8 : 12),
         itemBuilder: (context, index) {
@@ -2644,6 +2721,8 @@ class _FeaturesRow extends StatelessWidget {
                     : null,
             width: cardWidth,
             aspectRatio: MediaCard.aspectRatioForType(item.type),
+            focusColor: Color(prefs.get(UserPreferences.focusColor).colorValue),
+            cardFocusExpansion: cardExpansion,
             isFavorite: item.isFavorite,
             isPlayed: item.isPlayed,
             playedPercentage: item.playedPercentage,
@@ -2677,9 +2756,10 @@ class _ChaptersRow extends StatelessWidget {
     final isMobile = _isCompact(context);
 
     return SizedBox(
-      height: isMobile ? 170 : 200,
+      height: isMobile ? 180 : 210,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
         itemCount: chapters.length,
         separatorBuilder: (_, __) => SizedBox(width: isMobile ? 8 : 12),
         itemBuilder: (context, index) {
@@ -2975,13 +3055,15 @@ class _SeasonsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
+    final cardExpansion = prefs.get(UserPreferences.cardFocusExpansion);
     final isMobile = _isCompact(context);
     final cardWidth = isMobile ? 120.0 : 150.0;
 
     return SizedBox(
-      height: isMobile ? 220 : 280,
+      height: isMobile ? 230 : 290,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
         itemCount: seasons.length,
         separatorBuilder: (_, __) => SizedBox(width: isMobile ? 8 : 12),
         itemBuilder: (context, index) {
@@ -2999,6 +3081,8 @@ class _SeasonsRow extends StatelessWidget {
                     : null,
             width: cardWidth,
             aspectRatio: 2 / 3,
+            focusColor: Color(prefs.get(UserPreferences.focusColor).colorValue),
+            cardFocusExpansion: cardExpansion,
             isPlayed: season.isPlayed,
             unplayedCount: season.unplayedItemCount,
             watchedBehavior: watchedBehavior,
@@ -3173,106 +3257,139 @@ class _EpisodesRow extends StatelessWidget {
   }
 }
 
-class _NextUpCard extends StatelessWidget {
+class _NextUpCard extends StatefulWidget {
   final AggregatedItem episode;
   final ImageApi imageApi;
 
   const _NextUpCard({required this.episode, required this.imageApi});
 
   @override
+  State<_NextUpCard> createState() => _NextUpCardState();
+}
+
+class _NextUpCardState extends State<_NextUpCard> with FocusStateMixin {
+
+  @override
   Widget build(BuildContext context) {
+    final episode = widget.episode;
     final s = episode.parentIndexNumber;
     final e = episode.indexNumber;
     final label = s != null && e != null ? 'S${s}E$e' : null;
     final subtitle = [if (label != null) label, episode.name].join(' - ');
 
     final isMobile = _isCompact(context);
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    final cardExpansion =
+      GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
 
-    return GestureDetector(
-      onTap:
-          () => context.push(
-            Destinations.item(episode.id, serverId: episode.serverId),
-          ),
-      child: Container(
-        height: isMobile ? 100.0 : 120.0,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            SizedBox(
-              width: isMobile ? 178.0 : 213.0,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (episode.primaryImageTag != null)
-                    CachedNetworkImage(
-                      imageUrl: imageApi.getPrimaryImageUrl(
-                        episode.id,
-                        maxHeight: 240,
-                        tag: episode.primaryImageTag,
-                      ),
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const SizedBox.shrink(),
-                    ),
-                  if ((episode.playedPercentage ?? 0) > 0)
-                    _EpisodeProgressBar(percentage: episode.playedPercentage!),
-                ],
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (focused) => setFocused(focused),
+        child: GestureDetector(
+          onTap:
+              () => context.push(
+                Destinations.item(episode.id, serverId: episode.serverId),
               ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+          child: AnimatedScale(
+            scale: cardExpansion && showFocusBorder ? 1.02 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: Container(
+              height: isMobile ? 100.0 : 120.0,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: showFocusBorder
+                    ? Border.all(color: focusColor, width: 1.5)
+                    : null,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Row(
                 children: [
-                  Text(
-                    subtitle,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
+                  SizedBox(
+                    width: isMobile ? 178.0 : 213.0,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (episode.primaryImageTag != null)
+                          CachedNetworkImage(
+                            imageUrl: widget.imageApi.getPrimaryImageUrl(
+                              episode.id,
+                              maxHeight: 240,
+                              tag: episode.primaryImageTag,
+                            ),
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        if ((episode.playedPercentage ?? 0) > 0)
+                          _EpisodeProgressBar(percentage: episode.playedPercentage!),
+                      ],
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (episode.overview != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      episode.overview!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (episode.overview != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            episode.overview!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
+                  const SizedBox(width: 16),
+                  const Icon(
+                    Icons.play_circle_outline,
+                    color: Colors.white54,
+                    size: 40,
+                  ),
+                  const SizedBox(width: 16),
                 ],
               ),
             ),
-            const SizedBox(width: 16),
-            const Icon(
-              Icons.play_circle_outline,
-              color: Colors.white54,
-              size: 40,
-            ),
-            const SizedBox(width: 16),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _EpisodeCard extends StatelessWidget {
+class _EpisodeCard extends StatefulWidget {
   final AggregatedItem episode;
   final ImageApi imageApi;
 
   const _EpisodeCard({required this.episode, required this.imageApi});
 
   @override
+  State<_EpisodeCard> createState() => _EpisodeCardState();
+}
+
+class _EpisodeCardState extends State<_EpisodeCard> with FocusStateMixin {
+
+  @override
   Widget build(BuildContext context) {
+    final episode = widget.episode;
     final epNum = episode.indexNumber;
     final runtime = episode.runtime;
     final runtimeText =
@@ -3282,37 +3399,64 @@ class _EpisodeCard extends StatelessWidget {
                 : '${runtime.inMinutes}m')
             : null;
 
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    final cardExpansion =
+      GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
     final isMobile = _isCompact(context);
 
-    return GestureDetector(
-      onTap:
-          () => context.push(
-            Destinations.item(episode.id, serverId: episode.serverId),
-          ),
-      child: Container(
-        height: isMobile ? 90.0 : 110.0,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            SizedBox(
-              width: isMobile ? 160.0 : 196.0,
-              child: Stack(
-                fit: StackFit.expand,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (focused) => setFocused(focused),
+        child: GestureDetector(
+          onTap:
+              () => context.push(
+                Destinations.item(episode.id, serverId: episode.serverId),
+              ),
+          child: AnimatedScale(
+            scale: cardExpansion && showFocusBorder ? 1.02 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            child: Container(
+              height: isMobile ? 90.0 : 110.0,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(8),
+                border:
+                    showFocusBorder
+                        ? Border.all(color: focusColor, width: 1.5)
+                        : null,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Row(
                 children: [
-                  if (episode.primaryImageTag != null)
-                    CachedNetworkImage(
-                      imageUrl: imageApi.getPrimaryImageUrl(
-                        episode.id,
-                        maxHeight: 220,
-                        tag: episode.primaryImageTag,
-                      ),
-                      fit: BoxFit.cover,
-                      errorWidget:
-                          (_, __, ___) => Container(
+                  SizedBox(
+                    width: isMobile ? 160.0 : 196.0,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (episode.primaryImageTag != null)
+                          CachedNetworkImage(
+                            imageUrl: widget.imageApi.getPrimaryImageUrl(
+                              episode.id,
+                              maxHeight: 220,
+                              tag: episode.primaryImageTag,
+                            ),
+                            fit: BoxFit.cover,
+                            errorWidget:
+                                (_, __, ___) => Container(
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                  child: const Icon(
+                                    Icons.movie,
+                                    color: Colors.white24,
+                                    size: 32,
+                                  ),
+                                ),
+                          )
+                        else
+                          Container(
                             color: Colors.white.withValues(alpha: 0.05),
                             child: const Icon(
                               Icons.movie,
@@ -3320,83 +3464,76 @@ class _EpisodeCard extends StatelessWidget {
                               size: 32,
                             ),
                           ),
-                    )
-                  else
-                    Container(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      child: const Icon(
-                        Icons.movie,
-                        color: Colors.white24,
-                        size: 32,
-                      ),
-                    ),
-                  if ((episode.playedPercentage ?? 0) > 0)
-                    _EpisodeProgressBar(percentage: episode.playedPercentage!),
-                  if (episode.isPlayed)
-                    const Positioned(
-                      top: 6,
-                      right: 6,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Color(0xFF00A4DC),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(3),
-                          child: Icon(
-                            Icons.check,
-                            color: Colors.white,
-                            size: 14,
+                        if ((episode.playedPercentage ?? 0) > 0)
+                          _EpisodeProgressBar(percentage: episode.playedPercentage!),
+                        if (episode.isPlayed)
+                          const Positioned(
+                            top: 6,
+                            right: 6,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Color(0xFF00A4DC),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.all(3),
+                                child: Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                      ],
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    [
-                      if (epNum != null) 'Episode $epNum',
-                      episode.name,
-                    ].join(' - '),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (runtimeText != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      runtimeText,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.5),
-                      ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          [
+                            if (epNum != null) 'Episode $epNum',
+                            episode.name,
+                          ].join(' - '),
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (runtimeText != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            runtimeText,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                        if (episode.overview != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            episode.overview!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                  if (episode.overview != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      episode.overview!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                  ),
+                  const SizedBox(width: 12),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
-          ],
+          ),
         ),
       ),
     );
@@ -3614,6 +3751,7 @@ class _FilmographyRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
+    final cardExpansion = prefs.get(UserPreferences.cardFocusExpansion);
     final isMobile = _isCompact(context);
     final cardWidth = isMobile ? 120.0 : 150.0;
 
@@ -3640,6 +3778,8 @@ class _FilmographyRow extends StatelessWidget {
                     : null,
             width: cardWidth,
             aspectRatio: 2 / 3,
+            focusColor: Color(prefs.get(UserPreferences.focusColor).colorValue),
+            cardFocusExpansion: cardExpansion,
             isFavorite: item.isFavorite,
             isPlayed: item.isPlayed,
             playedPercentage: item.playedPercentage,
@@ -3998,6 +4138,7 @@ class _AlbumsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final watchedBehavior = prefs.get(UserPreferences.watchedIndicatorBehavior);
+    final cardExpansion = prefs.get(UserPreferences.cardFocusExpansion);
     final isMobile = _isCompact(context);
     final cardWidth = isMobile ? 120.0 : 150.0;
 
@@ -4022,6 +4163,8 @@ class _AlbumsRow extends StatelessWidget {
                     : null,
             width: cardWidth,
             aspectRatio: 1.0,
+            focusColor: Color(prefs.get(UserPreferences.focusColor).colorValue),
+            cardFocusExpansion: cardExpansion,
             watchedBehavior: watchedBehavior,
             itemType: album.type,
             onTap:

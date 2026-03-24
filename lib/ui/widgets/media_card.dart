@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../preference/preference_constants.dart';
+import '../mixins/focus_state_mixin.dart';
 
 class MediaCard extends StatefulWidget {
   final String? title;
@@ -106,27 +107,26 @@ class MediaCard extends StatefulWidget {
   State<MediaCard> createState() => _MediaCardState();
 }
 
-class _MediaCardState extends State<MediaCard> {
-  bool _focused = false;
-  bool _hovered = false;
+class _MediaCardState extends State<MediaCard> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final showMarquee = _focused || _hovered;
+    final showMarquee = showFocusBorder;
     return SizedBox(
       width: widget.width,
       child: MouseRegion(
+        cursor: SystemMouseCursors.click,
         onEnter: (_) {
-          setState(() => _hovered = true);
+          setHovered(true);
           widget.onHoverStart?.call();
         },
         onExit: (_) {
-          setState(() => _hovered = false);
+          setHovered(false);
           widget.onHoverEnd?.call();
         },
         child: Focus(
           onFocusChange: (hasFocus) {
-            setState(() => _focused = hasFocus);
+            setFocused(hasFocus);
             if (hasFocus) widget.onFocus?.call();
           },
           child: GestureDetector(
@@ -134,7 +134,7 @@ class _MediaCardState extends State<MediaCard> {
             onTap: widget.onTap,
             onLongPressStart: (_) => widget.onLongPress?.call(),
             child: AnimatedScale(
-              scale: widget.cardFocusExpansion && (_focused || _hovered) ? 1.05 : 1.0,
+              scale: widget.cardFocusExpansion && showFocusBorder ? 1.05 : 1.0,
               duration: const Duration(milliseconds: 150),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,8 +148,8 @@ class _MediaCardState extends State<MediaCard> {
                     unplayedCount: widget.unplayedCount,
                     playedPercentage: widget.playedPercentage,
                     watchedBehavior: widget.watchedBehavior,
-                    focused: _focused,
-                    hovered: _hovered,
+                    focused: focused,
+                    hovered: hovered,
                     focusColor: widget.focusColor,
                     isCircular: widget.itemType == 'Person',
                     itemType: widget.itemType,
@@ -232,64 +232,68 @@ class _CardImage extends StatelessWidget {
     final borderColor = focusColor ?? Theme.of(context).colorScheme.primary;
     return AspectRatio(
       aspectRatio: aspectRatio,
-      child: DecoratedBox(
-        decoration: showBorder
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(radius + 2),
-                border: Border.all(
-                  color: borderColor,
-                  width: 2,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: imageUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl!,
+                          fit: BoxFit.cover,
+                          fadeInDuration: const Duration(milliseconds: 200),
+                          errorWidget: (_, __, ___) =>
+                              _PlaceholderIcon(itemType: itemType),
+                        )
+                      : _PlaceholderIcon(itemType: itemType),
                 ),
-              )
-            : const BoxDecoration(),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: imageUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: imageUrl!,
-                        fit: BoxFit.cover,
-                        fadeInDuration: const Duration(milliseconds: 200),
-                        errorWidget: (_, __, ___) =>
-                      _PlaceholderIcon(itemType: itemType),
-                      )
-                  : _PlaceholderIcon(itemType: itemType),
-              ),
-              if (isFavorite)
-                const Positioned(
-                  top: 4,
-                  left: 4,
-                  child: Icon(Icons.favorite, color: Colors.red, size: 18),
-                ),
-              if (_showWatchedIndicator)
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: _buildWatchedIndicator(),
-                ),
-              if (playedPercentage != null && playedPercentage! > 0)
-                Positioned(
-                  left: 6,
-                  right: 6,
-                  bottom: 6,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: LinearProgressIndicator(
-                      value: playedPercentage! / 100,
-                      minHeight: 6,
-                      backgroundColor: Colors.black54,
-                      valueColor:
-                          const AlwaysStoppedAnimation<Color>(Color(0xFF00A4DC)),
+                if (isFavorite)
+                  const Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Icon(Icons.favorite, color: Colors.red, size: 18),
+                  ),
+                if (_showWatchedIndicator)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: _buildWatchedIndicator(),
+                  ),
+                if (playedPercentage != null && playedPercentage! > 0)
+                  Positioned(
+                    left: 6,
+                    right: 6,
+                    bottom: 6,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: playedPercentage! / 100,
+                        minHeight: 6,
+                        backgroundColor: Colors.black54,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFF00A4DC),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
+          if (showBorder)
+            IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  border: Border.all(color: borderColor, width: 2),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -12,6 +12,7 @@ import '../../../data/services/background_service.dart';
 import '../../../data/viewmodels/library_browse_view_model.dart';
 import '../../../preference/preference_constants.dart';
 import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/media_card.dart';
@@ -447,12 +448,16 @@ class _LibraryBrowseScreenState extends State<LibraryBrowseScreen> {
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final item = _vm.items[index];
                   final itemAspectRatio = _itemAspectRatio(item);
+                  final focusColor =
+                      Color(_prefs.get(UserPreferences.focusColor).colorValue);
                   return MediaCard(
                     title: item.name,
                     subtitle: _cardSubtitle(item),
                     imageUrl: _imageUrl(item),
                     width: double.infinity,
                     aspectRatio: itemAspectRatio,
+                    focusColor: focusColor,
+                    cardFocusExpansion: _prefs.get(UserPreferences.cardFocusExpansion),
                     isPlayed: item.isPlayed,
                     isFavorite: item.isFavorite,
                     unplayedCount: item.unplayedItemCount,
@@ -793,18 +798,18 @@ class _ToolbarButton extends StatefulWidget {
   State<_ToolbarButton> createState() => _ToolbarButtonState();
 }
 
-class _ToolbarButtonState extends State<_ToolbarButton> {
-  bool _focused = false;
-  bool _hovered = false;
+class _ToolbarButtonState extends State<_ToolbarButton> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final showFocusBorder = _focused || _hovered;
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
       child: Focus(
-        onFocusChange: (f) => setState(() => _focused = f),
+        onFocusChange: (f) => setFocused(f),
         child: GestureDetector(
           onTap: widget.onTap,
           child: AnimatedContainer(
@@ -812,17 +817,17 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: _focused ? Colors.white : Colors.transparent,
+              color: focused ? Colors.white : Colors.transparent,
               borderRadius: BorderRadius.circular(6),
               border:
                   showFocusBorder
-                      ? Border.all(color: Colors.white, width: 1.5)
+                      ? Border.all(color: focusColor, width: 1.5)
                       : null,
             ),
             child: Icon(
               widget.icon,
               size: 28,
-              color: _focused ? Colors.black : Colors.white.withAlpha(128),
+              color: focused ? Colors.black : Colors.white.withAlpha(128),
             ),
           ),
         ),
@@ -902,18 +907,18 @@ class _AlphaLetterButton extends StatefulWidget {
   State<_AlphaLetterButton> createState() => _AlphaLetterButtonState();
 }
 
-class _AlphaLetterButtonState extends State<_AlphaLetterButton> {
-  bool _hovered = false;
-  bool _focused = false;
+class _AlphaLetterButtonState extends State<_AlphaLetterButton> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final showFocusBorder = _hovered || _focused;
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
       child: Focus(
-        onFocusChange: (f) => setState(() => _focused = f),
+        onFocusChange: (f) => setFocused(f),
         child: GestureDetector(
           onTap: widget.onTap,
           child: AnimatedContainer(
@@ -926,7 +931,7 @@ class _AlphaLetterButtonState extends State<_AlphaLetterButton> {
               borderRadius: BorderRadius.circular(4),
               border:
                   showFocusBorder
-                      ? Border.all(color: Colors.white, width: 1.5)
+                    ? Border.all(color: focusColor, width: 1.5)
                       : null,
             ),
             child: Text(

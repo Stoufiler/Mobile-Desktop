@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import '../../../data/services/seerr/seerr_api_models.dart';
 import '../../../data/viewmodels/seerr_discover_view_model.dart';
 import '../../../preference/preference_constants.dart';
+import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/library_row.dart';
 import '../../widgets/media_card.dart';
@@ -160,6 +162,10 @@ class _SeerrDiscoverScreenState extends State<SeerrDiscoverScreen> {
   }
 
   Widget _buildMediaRow(SeerrDiscoverRow row, int rowIndex) {
+    final focusColor =
+      Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    final cardExpansion =
+      GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
     final children = <Widget>[];
     for (final item in row.items) {
       children.add(MediaCard(
@@ -170,6 +176,8 @@ class _SeerrDiscoverScreenState extends State<SeerrDiscoverScreen> {
             : null,
         width: 130,
         aspectRatio: 2 / 3,
+        focusColor: focusColor,
+        cardFocusExpansion: cardExpansion,
         onTap: () => _onItemTap(item),
         onFocus: () => _onItemSelected(item),
         onHoverStart: () => _onItemSelected(item),
@@ -438,19 +446,22 @@ class _GenreCard extends StatefulWidget {
   State<_GenreCard> createState() => _GenreCardState();
 }
 
-class _GenreCardState extends State<_GenreCard> {
-  bool _focused = false;
+class _GenreCardState extends State<_GenreCard> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
     return Focus(
-      onFocusChange: (focused) => setState(() => _focused = focused),
+      onFocusChange: (focused) => setFocused(focused),
       child: GestureDetector(
         onTap: widget.onTap,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
+          onEnter: (_) => setHovered(true),
+          onExit: (_) => setHovered(false),
           child: AnimatedScale(
-            scale: _focused ? 1.05 : 1.0,
+            scale: showFocusBorder ? 1.05 : 1.0,
             duration: const Duration(milliseconds: 150),
             child: SizedBox(
               width: 180,
@@ -497,10 +508,10 @@ class _GenreCardState extends State<_GenreCard> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (_focused)
+                    if (showFocusBorder)
                       Container(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white, width: 2),
+                          border: Border.all(color: focusColor, width: 2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
@@ -526,19 +537,22 @@ class _LogoCard extends StatefulWidget {
   State<_LogoCard> createState() => _LogoCardState();
 }
 
-class _LogoCardState extends State<_LogoCard> {
-  bool _focused = false;
+class _LogoCardState extends State<_LogoCard> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
     return Focus(
-      onFocusChange: (focused) => setState(() => _focused = focused),
+      onFocusChange: (focused) => setFocused(focused),
       child: GestureDetector(
         onTap: widget.onTap,
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
+          onEnter: (_) => setHovered(true),
+          onExit: (_) => setHovered(false),
           child: AnimatedScale(
-            scale: _focused ? 1.05 : 1.0,
+            scale: showFocusBorder ? 1.05 : 1.0,
             duration: const Duration(milliseconds: 150),
             child: SizedBox(
               width: 180,
@@ -547,8 +561,8 @@ class _LogoCardState extends State<_LogoCard> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A1A2E),
                   borderRadius: BorderRadius.circular(8),
-                  border: _focused
-                      ? Border.all(color: Colors.white, width: 2)
+                    border: showFocusBorder
+                      ? Border.all(color: focusColor, width: 2)
                       : null,
                 ),
                 child: widget.logoUrl != null

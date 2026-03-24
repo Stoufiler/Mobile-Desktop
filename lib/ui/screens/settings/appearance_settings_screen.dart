@@ -53,13 +53,12 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
               WatchedIndicatorBehavior.never => 'Never',
             },
           ),
-          if (!isMobile)
-            SwitchPreferenceTile(
-              preference: UserPreferences.cardFocusExpansion,
-              title: 'Card Focus Expansion',
-              subtitle: 'Scale cards when focused',
-              icon: Icons.zoom_in,
-            ),
+          SwitchPreferenceTile(
+            preference: UserPreferences.cardFocusExpansion,
+            title: 'Focus Expansion Animation',
+            subtitle: 'Scale focused or hovered cards and tiles',
+            icon: Icons.zoom_in,
+          ),
           SwitchPreferenceTile(
             preference: UserPreferences.backdropEnabled,
             title: 'Background Backdrops',

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../data/repositories/seerr_repository.dart';
 import '../../../data/services/seerr/seerr_api_models.dart';
 import '../../../data/viewmodels/seerr_person_view_model.dart';
+import '../../../preference/user_preferences.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/library_row.dart';
 import '../../widgets/media_card.dart';
@@ -265,6 +266,10 @@ class _SeerrPersonScreenState extends State<SeerrPersonScreen> {
 
   Widget _buildCreditsRow(
       String title, List<SeerrDiscoverItem> items, bool isCast) {
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    final cardExpansion =
+      GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
     return LibraryRow(
       title: title,
       children: items
@@ -278,6 +283,8 @@ class _SeerrPersonScreenState extends State<SeerrPersonScreen> {
                     : null,
                 width: 130,
                 aspectRatio: 2 / 3,
+                focusColor: focusColor,
+                cardFocusExpansion: cardExpansion,
                 onTap: () {
                   final mediaType = item.mediaType ?? 'movie';
                   context.push(

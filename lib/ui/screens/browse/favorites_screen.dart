@@ -12,6 +12,7 @@ import '../../../data/services/background_service.dart';
 import '../../../data/viewmodels/favorites_view_model.dart';
 import '../../../preference/preference_constants.dart';
 import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../../util/platform_detection.dart';
 import '../../navigation/destinations.dart';
 import '../../widgets/media_card.dart';
@@ -243,12 +244,16 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 ),
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final item = _vm.items[index];
+                  final focusColor =
+                      Color(_prefs.get(UserPreferences.focusColor).colorValue);
                   return MediaCard(
                     title: item.name,
                     subtitle: _cardSubtitle(item),
                     imageUrl: _imageUrl(item),
                     width: double.infinity,
                     aspectRatio: ar,
+                    focusColor: focusColor,
+                    cardFocusExpansion: _prefs.get(UserPreferences.cardFocusExpansion),
                     isPlayed: item.isPlayed,
                     isFavorite: item.isFavorite,
                     unplayedCount: item.unplayedItemCount,
@@ -565,27 +570,34 @@ class _ToolbarButton extends StatefulWidget {
   State<_ToolbarButton> createState() => _ToolbarButtonState();
 }
 
-class _ToolbarButtonState extends State<_ToolbarButton> {
-  bool _focused = false;
+class _ToolbarButtonState extends State<_ToolbarButton> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: _focused ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(
-            widget.icon,
-            size: 22,
-            color: _focused ? Colors.black : Colors.white.withAlpha(128),
+    final focusColor =
+        Color(GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (f) => setFocused(f),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: focused ? Colors.white : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: showFocusBorder ? Border.all(color: focusColor, width: 1.5) : null,
+            ),
+            child: Icon(
+              widget.icon,
+              size: 22,
+              color: focused ? Colors.black : Colors.white.withAlpha(128),
+            ),
           ),
         ),
       ),

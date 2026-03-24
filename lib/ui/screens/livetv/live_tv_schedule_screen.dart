@@ -5,6 +5,8 @@ import 'package:server_core/server_core.dart';
 
 import '../../../data/viewmodels/recordings_view_model.dart';
 import '../../../data/viewmodels/schedule_view_model.dart';
+import '../../../preference/user_preferences.dart';
+import '../../../ui/mixins/focus_state_mixin.dart';
 import '../../widgets/navigation_layout.dart';
 
 class LiveTvScheduleScreen extends StatefulWidget {
@@ -274,68 +276,75 @@ class _ScheduleCard extends StatefulWidget {
   State<_ScheduleCard> createState() => _ScheduleCardState();
 }
 
-class _ScheduleCardState extends State<_ScheduleCard> {
-  bool _focused = false;
+class _ScheduleCardState extends State<_ScheduleCard> with FocusStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final scale = _focused ? 1.08 : 1.0;
-    final alpha = _focused ? 1.0 : 0.75;
+    final cardExpansion =
+        GetIt.instance<UserPreferences>().get(UserPreferences.cardFocusExpansion);
+    final scale = cardExpansion && showFocusBorder ? 1.08 : 1.0;
+    final alpha = showFocusBorder ? 1.0 : 0.75;
+    final focusColor = Color(
+      GetIt.instance<UserPreferences>().get(UserPreferences.focusColor).colorValue,
+    );
 
-    return Focus(
-      onFocusChange: (focused) {
-        setState(() => _focused = focused);
-        if (focused) widget.onFocused();
-      },
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: scale,
-          duration: const Duration(milliseconds: 150),
-          child: Opacity(
-            opacity: alpha,
-            child: SizedBox(
-              width: 200,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 200,
-                    height: 112,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(4),
-                      border: _focused
-                          ? Border.all(
-                              color: Colors.white.withValues(alpha: 0.3),
-                            )
-                          : null,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setHovered(true),
+      onExit: (_) => setHovered(false),
+      child: Focus(
+        onFocusChange: (focused) {
+          setFocused(focused);
+          if (focused) widget.onFocused();
+        },
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: scale,
+            duration: const Duration(milliseconds: 150),
+            child: Opacity(
+              opacity: alpha,
+              child: SizedBox(
+                width: 200,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 200,
+                      height: 112,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(4),
+                        border: showFocusBorder
+                            ? Border.all(color: focusColor, width: 1.5)
+                            : null,
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _buildImage(),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: _buildImage(),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    widget.item.name,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (widget.item.subtitle.isNotEmpty)
+                    const SizedBox(height: 5),
                     Text(
-                      widget.item.subtitle,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.5),
+                      widget.item.name,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                ],
+                    if (widget.item.subtitle.isNotEmpty)
+                      Text(
+                        widget.item.subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
