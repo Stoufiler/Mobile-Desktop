@@ -4,6 +4,7 @@ import 'package:playback_emby/playback_emby.dart';
 import 'package:playback_jellyfin/playback_jellyfin.dart';
 import 'package:server_core/server_core.dart';
 
+import '../../../playback/device_profile_builder.dart';
 import '../../../util/platform_detection.dart';
 import '../../models/aggregated_item.dart';
 import '../media_server_client_factory.dart';
@@ -39,6 +40,11 @@ class AirPlayProvider implements CastProvider, CastTransportControls {
       return const [];
     }
 
+    final isAvailable = await _native.isAirPlayRoutePickerAvailable();
+    if (!isAvailable) {
+      return const [];
+    }
+
     return const [
       CastTarget(
         id: 'airplay-system-picker',
@@ -58,21 +64,44 @@ class AirPlayProvider implements CastProvider, CastTransportControls {
     int? audioStreamIndex,
     int? subtitleStreamIndex,
   }) async {
+    final isAvailable = await _native.isAirPlayRoutePickerAvailable();
+    if (!isAvailable) {
+      throw StateError('AirPlay route picker is unavailable on this device.');
+    }
+
     final client =
         _clientFactory.getClientIfExists(item.serverId) ?? GetIt.instance<MediaServerClient>();
-    final hasExplicitIndices = audioStreamIndex != null || subtitleStreamIndex != null;
     final resolution = await _resolverForClient(client).resolve(
       item,
+      deviceProfile: DeviceProfileBuilder.build(
+        ac3Enabled: false,
+        useProgressiveTranscode: false,
+        maxBitrateMbps: 15,
+        subtitlesInManifest: false,
+      ),
       audioStreamIndex: audioStreamIndex,
       subtitleStreamIndex: subtitleStreamIndex,
-      startTimeTicks: startPositionTicks,
-      enableDirectPlay: !hasExplicitIndices,
+      startTimeTicks: null,
+      enableDirectPlay: false,
+      enableDirectStream: false,
     );
 
+    var streamUrl = resolution.streamUrl;
+    final token = client.accessToken;
+    if (token != null &&
+        token.isNotEmpty &&
+        !streamUrl.toLowerCase().contains('api_key=') &&
+        !streamUrl.toLowerCase().contains('apikey=')) {
+      final separator = streamUrl.contains('?') ? '&' : '?';
+      streamUrl = '$streamUrl${separator}api_key=${Uri.encodeComponent(token)}';
+    }
+
+    streamUrl = streamUrl.replaceFirst('?&', '?');
+
     await _nativeAirPlay.loadAirPlay(
-      url: resolution.streamUrl,
+      url: streamUrl,
       title: item.name,
-      positionTicks: startPositionTicks ?? 0,
+      positionTicks: 0,
     );
 
     await _native.showAirPlayRoutePicker();

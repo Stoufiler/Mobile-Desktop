@@ -68,6 +68,13 @@ class NativeCastChannel {
     await _channel.invokeMethod<void>('showAirPlayRoutePicker');
   }
 
+  Future<bool> isAirPlayRoutePickerAvailable() async {
+    if (!_supported) {
+      return false;
+    }
+    return await _channel.invokeMethod<bool>('isAirPlayRoutePickerAvailable') ?? false;
+  }
+
   Future<void> pauseGoogleCast() async {
     if (!_supported) {
       return;

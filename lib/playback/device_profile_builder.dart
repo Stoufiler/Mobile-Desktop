@@ -8,6 +8,7 @@ class DeviceProfileBuilder {
     bool ac3Enabled = true,
     bool stereoDownmix = false,
     bool useProgressiveTranscode = false,
+    bool subtitlesInManifest = true,
   }) {
     final bitrate = (maxBitrateMbps ?? 200) * 1000000;
     final streamingBitrate = useProgressiveTranscode
@@ -22,6 +23,7 @@ class DeviceProfileBuilder {
       'TranscodingProfiles': _transcodingProfiles(
         ac3Enabled: ac3Enabled,
         useProgressiveTranscode: useProgressiveTranscode,
+        subtitlesInManifest: subtitlesInManifest,
       ),
       'ContainerProfiles': <Map<String, dynamic>>[],
       'CodecProfiles': _codecProfiles(stereoDownmix: stereoDownmix),
@@ -115,9 +117,11 @@ class DeviceProfileBuilder {
   static List<Map<String, dynamic>> _transcodingProfiles({
     required bool ac3Enabled,
     bool useProgressiveTranscode = false,
+    bool subtitlesInManifest = true,
   }) {
     final hlsAudio = _hlsAudioCodecs(ac3Enabled: ac3Enabled);
     final protocol = useProgressiveTranscode ? 'http' : 'hls';
+    final enableSubs = useProgressiveTranscode ? false : subtitlesInManifest;
     return [
       {
         'Container': useProgressiveTranscode ? 'mp4' : 'ts',
@@ -127,7 +131,7 @@ class DeviceProfileBuilder {
         'Protocol': protocol,
         'Context': 'Streaming',
         'CopyTimestamps': false,
-        'EnableSubtitlesInManifest': !useProgressiveTranscode,
+        'EnableSubtitlesInManifest': enableSubs,
         'BreakOnNonKeyFrames': false,
       },
       {
@@ -138,7 +142,7 @@ class DeviceProfileBuilder {
         'Protocol': protocol,
         'Context': 'Streaming',
         'CopyTimestamps': false,
-        'EnableSubtitlesInManifest': !useProgressiveTranscode,
+        'EnableSubtitlesInManifest': enableSubs,
         'BreakOnNonKeyFrames': false,
       },
       {

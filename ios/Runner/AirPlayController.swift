@@ -1,5 +1,7 @@
 import AVFoundation
+import AVKit
 import MediaPlayer
+import UIKit
 
 final class AirPlayController {
     private var eventSink: FlutterEventSink?
@@ -8,8 +10,14 @@ final class AirPlayController {
     private var latestPositionTicks: Int64 = 0
 
     private var avPlayer: AVPlayer?
+    private var playerViewController: AVPlayerViewController?
     private var avPlayerTimeObserver: Any?
-    private var pendingUrl: String?
+    private var externalPlaybackObserver: NSKeyValueObservation?
+    private var playerItemStatusObserver: NSKeyValueObservation?
+    private var playerItemFailedObserver: NSObjectProtocol?
+    private var currentStreamURL: URL?
+    private var hasRetriedCurrentStream = false
+    private var streamStartPositionSeconds: Double = 0
     private var pendingTitle: String = ""
     private var pendingPositionSeconds: Double = 0
 
@@ -35,34 +43,49 @@ final class AirPlayController {
 
     // MARK: - Native AirPlay playback (detail-screen cast)
 
-    /// Queue content to play as soon as AirPlay becomes the active route.
-    /// If AirPlay is already active the content starts immediately.
-    func preparePendingContent(urlString: String, title: String, positionSeconds: Double) {
-        pendingUrl = urlString
+    func presentPlayerForAirPlay(
+        urlString: String,
+        title: String,
+        positionSeconds: Double,
+        from presenter: UIViewController
+    ) {
         pendingTitle = title
         pendingPositionSeconds = positionSeconds
-        if isActive {
-            DispatchQueue.main.async { self.startPendingContent() }
-        }
-    }
 
-    private func startPendingContent() {
-        guard let urlString = pendingUrl, let url = URL(string: urlString) else { return }
-        pendingUrl = nil
+        guard let url = URL(string: urlString) else { return }
 
         stopNativePlayer()
+        currentStreamURL = url
+        hasRetriedCurrentStream = false
+        streamStartPositionSeconds = positionSeconds
 
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {}
 
-        let item = AVPlayerItem(url: url)
-        let player = AVPlayer(playerItem: item)
+        let playerItem = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: playerItem)
+        player.allowsExternalPlayback = true
+        player.usesExternalPlaybackWhileExternalScreenIsActive = true
         avPlayer = player
+        attachPlayerItemDebugObservers(playerItem)
 
-        if pendingPositionSeconds > 0 {
-            player.seek(to: CMTime(seconds: pendingPositionSeconds, preferredTimescale: 600))
+        let pvc = AVPlayerViewController()
+        pvc.player = player
+        pvc.allowsPictureInPicturePlayback = false
+        pvc.modalPresentationStyle = .fullScreen
+        playerViewController = pvc
+
+        externalPlaybackObserver = player.observe(\.isExternalPlaybackActive, options: [.new]) { [weak self] player, _ in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                if player.isExternalPlaybackActive {
+                    self.onVideoAirPlayActivated()
+                } else {
+                    self.onVideoAirPlayDeactivated()
+                }
+            }
         }
 
         avPlayerTimeObserver = player.addPeriodicTimeObserver(
@@ -70,11 +93,21 @@ final class AirPlayController {
             queue: .main
         ) { [weak self] time in
             guard let self, self.avPlayer != nil else { return }
-            self.latestPositionTicks = Int64(time.seconds * 10_000_000)
-            self.emitCurrentPlaybackEvent(force: false)
+            let absoluteSeconds = time.seconds + self.streamStartPositionSeconds
+            self.latestPositionTicks = Int64(absoluteSeconds * 10_000_000)
+            if self.isActive {
+                self.emitCurrentPlaybackEvent(force: false)
+            }
         }
 
-        player.play()
+        presenter.present(pvc, animated: true) { [weak player] in
+            player?.play()
+        }
+    }
+
+    private func onVideoAirPlayActivated() {
+        guard !isActive else { return }
+        isActive = true
         playbackState = "playing"
 
         let nowPlayingInfo: [String: Any] = [
@@ -83,17 +116,87 @@ final class AirPlayController {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: pendingPositionSeconds,
         ]
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        pendingPositionSeconds = 0
 
+        emitEvent(state: "connected")
         emitCurrentPlaybackEvent(force: true)
     }
 
+    private func onVideoAirPlayDeactivated() {
+        guard isActive else { return }
+        isActive = false
+        emitEvent(state: "disconnected")
+    }
+
     private func stopNativePlayer() {
+        if let observer = playerItemFailedObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playerItemFailedObserver = nil
+        }
+        playerItemStatusObserver?.invalidate()
+        playerItemStatusObserver = nil
+        externalPlaybackObserver?.invalidate()
+        externalPlaybackObserver = nil
         if let observer = avPlayerTimeObserver {
             avPlayer?.removeTimeObserver(observer)
             avPlayerTimeObserver = nil
         }
         avPlayer?.pause()
         avPlayer = nil
+        if let pvc = playerViewController {
+            pvc.player = nil
+            if pvc.presentingViewController != nil {
+                pvc.dismiss(animated: true)
+            }
+            playerViewController = nil
+        }
+        currentStreamURL = nil
+        hasRetriedCurrentStream = false
+        streamStartPositionSeconds = 0
+    }
+
+    private func attachPlayerItemDebugObservers(_ playerItem: AVPlayerItem) {
+        playerItemFailedObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { [weak self] _ in
+            self?.retryCurrentStreamOnceIfNeeded()
+        }
+
+        playerItemStatusObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
+            if item.status == .failed {
+                self?.retryCurrentStreamOnceIfNeeded()
+            }
+        }
+    }
+
+    private func retryCurrentStreamOnceIfNeeded() {
+        guard !hasRetriedCurrentStream else { return }
+        guard let player = avPlayer, let url = currentStreamURL else { return }
+        hasRetriedCurrentStream = true
+        streamStartPositionSeconds = 0
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self, weak player] in
+            guard let self, let player else { return }
+            let retryURL = self.urlWithoutStartTimeTicks(url)
+            let retryItem = AVPlayerItem(url: retryURL)
+            self.attachPlayerItemDebugObservers(retryItem)
+            player.replaceCurrentItem(with: retryItem)
+            player.play()
+        }
+    }
+
+    private func urlWithoutStartTimeTicks(_ url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = components.queryItems, !items.isEmpty else {
+            return url
+        }
+
+        let filtered = items.filter { $0.name.caseInsensitiveCompare("StartTimeTicks") != .orderedSame }
+        guard filtered.count != items.count else { return url }
+        components.queryItems = filtered
+        return components.url ?? url
     }
 
     func setEventSink(_ sink: FlutterEventSink?) {
@@ -132,7 +235,6 @@ final class AirPlayController {
     func updatePlaybackState(isPlaying: Bool, isBuffering: Bool, positionTicks: Int64) {
         if avPlayer != nil {
             stopNativePlayer()
-            pendingUrl = nil
         }
         latestPositionTicks = max(0, positionTicks)
         if isBuffering {
@@ -150,7 +252,6 @@ final class AirPlayController {
 
     func stop() {
         stopNativePlayer()
-        pendingUrl = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         if isActive {
             isActive = false
@@ -172,18 +273,15 @@ final class AirPlayController {
     private func refreshRouteStatus() {
         let nextActive = detectAirPlay()
         let wasActive = isActive
-        isActive = nextActive
 
-        guard wasActive != isActive else {
-            emitCurrentPlaybackEvent(force: false)
-            return
-        }
+        guard avPlayer == nil else { return }
+
+        isActive = nextActive
+        guard wasActive != isActive else { return }
+
         DispatchQueue.main.async {
             self.emitEvent(state: self.isActive ? "connected" : "disconnected")
             self.emitCurrentPlaybackEvent(force: true)
-            if self.isActive && self.pendingUrl != nil {
-                self.startPendingContent()
-            }
         }
     }
 

@@ -298,78 +298,80 @@ class _CastMiniPlayerContentState extends State<_CastMiniPlayerContent> {
       },
       child: GestureDetector(
         onTap: _showFullControls,
-        child: Container(
-          padding: EdgeInsets.only(bottom: bottomPad),
+        child: Material(
           color: AppColorScheme.surface,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _SeekSliver(
-                castService: _castService,
-                durationTicks: durationTicks,
-                isSeeking: _isSeeking,
-                seekValue: _seekValue,
-                onSeekStart: (v) => setState(() {
-                  _isSeeking = true;
-                  _seekValue = v;
-                }),
-                onSeekChanged: (v) => setState(() => _seekValue = v),
-                onSeekEnd: (v) => _onSeekEnd(v, durationTicks),
-              ),
-              SizedBox(
-                height: 56,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      Icon(_kindIcon, color: Colors.white70, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: AppTypography.fontSizeSm,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      ValueListenableBuilder<String?>(
-                        valueListenable: _castService.remoteStateNotifier,
-                        builder: (context, state, _) {
-                          final isPlaying = state == 'playing';
-                          return IconButton(
-                            icon: Icon(
-                              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          child: Container(
+            padding: EdgeInsets.only(bottom: bottomPad),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SeekSliver(
+                  castService: _castService,
+                  durationTicks: durationTicks,
+                  isSeeking: _isSeeking,
+                  seekValue: _seekValue,
+                  onSeekStart: (v) => setState(() {
+                    _isSeeking = true;
+                    _seekValue = v;
+                  }),
+                  onSeekChanged: (v) => setState(() => _seekValue = v),
+                  onSeekEnd: (v) => _onSeekEnd(v, durationTicks),
+                ),
+                SizedBox(
+                  height: 56,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      children: [
+                        Icon(_kindIcon, color: Colors.white70, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
                               color: Colors.white,
+                              fontSize: AppTypography.fontSizeSm,
+                              fontWeight: FontWeight.w500,
                             ),
-                            onPressed: () => isPlaying
-                                ? _doAction(() => _castService.pause(_kind))
-                                : _doAction(() => _castService.play(_kind)),
-                          );
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.stop_rounded, color: Colors.white),
-                        onPressed: () => _doAction(() => _castService.stop(_kind)),
-                      ),
-                      if (_kind == CastTargetKind.jellyfinSession) ...[
-                        IconButton(
-                          icon: const Icon(Icons.subtitles_outlined, color: Colors.white),
-                          onPressed: () => _showTrackSelector(audio: false),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        ValueListenableBuilder<String?>(
+                          valueListenable: _castService.remoteStateNotifier,
+                          builder: (context, state, _) {
+                            final isPlaying = state == 'playing';
+                            return IconButton(
+                              icon: Icon(
+                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                              ),
+                              onPressed: () => isPlaying
+                                  ? _doAction(() => _castService.pause(_kind))
+                                  : _doAction(() => _castService.play(_kind)),
+                            );
+                          },
                         ),
                         IconButton(
-                          icon: const Icon(Icons.audiotrack_outlined, color: Colors.white),
-                          onPressed: () => _showTrackSelector(audio: true),
+                          icon: const Icon(Icons.stop_rounded, color: Colors.white),
+                          onPressed: () => _doAction(() => _castService.stop(_kind)),
                         ),
+                        if (_kind == CastTargetKind.jellyfinSession) ...[
+                          IconButton(
+                            icon: const Icon(Icons.subtitles_outlined, color: Colors.white),
+                            onPressed: () => _showTrackSelector(audio: false),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.audiotrack_outlined, color: Colors.white),
+                            onPressed: () => _showTrackSelector(audio: true),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -414,22 +416,25 @@ class _SeekSliver extends StatelessWidget {
             isSeeking ? seekValue : positionTicks.toDouble();
         final double maxValue = durationTicks;
 
-        return SliderTheme(
-          data: SliderThemeData(
-            trackHeight: 2,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-            activeTrackColor: AppColorScheme.accent,
-            inactiveTrackColor: Colors.white12,
-            thumbColor: AppColorScheme.accent,
-            overlayColor: AppColorScheme.accent.withValues(alpha: 0.2),
-          ),
-          child: Slider(
-            value: posValue.clamp(0.0, maxValue),
-            max: maxValue,
-            onChangeStart: onSeekStart,
-            onChanged: onSeekChanged,
-            onChangeEnd: onSeekEnd,
+        return Material(
+          type: MaterialType.transparency,
+          child: SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              activeTrackColor: AppColorScheme.accent,
+              inactiveTrackColor: Colors.white12,
+              thumbColor: AppColorScheme.accent,
+              overlayColor: AppColorScheme.accent.withValues(alpha: 0.2),
+            ),
+            child: Slider(
+              value: posValue.clamp(0.0, maxValue),
+              max: maxValue,
+              onChangeStart: onSeekStart,
+              onChanged: onSeekChanged,
+              onChangeEnd: onSeekEnd,
+            ),
           ),
         );
       },

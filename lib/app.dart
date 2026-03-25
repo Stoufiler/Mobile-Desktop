@@ -33,16 +33,25 @@ class MoonfinApp extends StatelessWidget {
               path == '/server' ||
               path == '/login';
 
-          return Column(
-            children: [
-              const OfflineBanner(),
-              Expanded(
-                child: _ConnectivityListener(
-                  child: child ?? const SizedBox.shrink(),
+          return Overlay(
+            initialEntries: [
+              OverlayEntry(
+                builder: (context) => Material(
+                  type: MaterialType.transparency,
+                  child: Column(
+                    children: [
+                      const OfflineBanner(),
+                      Expanded(
+                        child: _ConnectivityListener(
+                          child: child ?? const SizedBox.shrink(),
+                        ),
+                      ),
+                      if (!hidePlayer) const MiniAudioPlayer(),
+                      if (!hidePlayer) const CastMiniPlayer(),
+                    ],
+                  ),
                 ),
               ),
-              if (!hidePlayer) const MiniAudioPlayer(),
-              if (!hidePlayer) const CastMiniPlayer(),
             ],
           );
         },

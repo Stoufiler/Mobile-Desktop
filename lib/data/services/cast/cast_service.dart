@@ -141,11 +141,14 @@ class CastService {
       subtitleStreamIndex: subtitleStreamIndex,
     );
 
-    activeKindNotifier.value = target.kind;
     activeTargetNotifier.value = target;
     castItemNotifier.value = item;
     remoteStateNotifier.value = null;
     remotePositionNotifier.value = startPositionTicks ?? 0;
+
+    if (target.kind != CastTargetKind.airPlay) {
+      activeKindNotifier.value = target.kind;
+    }
   }
 
   Future<void> play(CastTargetKind kind) async {

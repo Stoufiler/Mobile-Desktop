@@ -51,6 +51,14 @@ private final class NativeAirPlayEventStreamHandler: NSObject, FlutterStreamHand
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, GCKSessionManagerListener {
+  private static let isSimulator: Bool = {
+    #if targetEnvironment(simulator)
+      return true
+    #else
+      return false
+    #endif
+  }()
+
   private let castDiscoveryDelaySeconds: TimeInterval = 1.5
   private let castSessionStartTimeoutSeconds: TimeInterval = 15
   private var hasConfiguredGoogleCast = false
@@ -75,6 +83,20 @@ private final class NativeAirPlayEventStreamHandler: NSObject, FlutterStreamHand
     let queueItems: [[String: Any]]
     let startPositionTicks: Int64?
     let result: FlutterResult
+  }
+
+  private func topViewController(from root: UIViewController?) -> UIViewController? {
+    guard let root else { return nil }
+    if let nav = root as? UINavigationController {
+      return topViewController(from: nav.visibleViewController)
+    }
+    if let tab = root as? UITabBarController {
+      return topViewController(from: tab.selectedViewController)
+    }
+    if let presented = root.presentedViewController {
+      return topViewController(from: presented)
+    }
+    return root
   }
 
   override func application(
@@ -435,7 +457,7 @@ private final class NativeAirPlayEventStreamHandler: NSObject, FlutterStreamHand
           result: result
         )
       case "showAirPlayRoutePicker":
-        guard let vc = controller else {
+        guard controller != nil else {
           result(
             FlutterError(
               code: "NO_VIEW_CONTROLLER",
@@ -446,19 +468,21 @@ private final class NativeAirPlayEventStreamHandler: NSObject, FlutterStreamHand
           return
         }
 
-        DispatchQueue.main.async {
-          let routePicker = AVRoutePickerView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
-          routePicker.isHidden = true
-          vc.view.addSubview(routePicker)
-
-          let button = routePicker.subviews.compactMap { $0 as? UIButton }.first
-          button?.sendActions(for: .touchUpInside)
-
-          DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            routePicker.removeFromSuperview()
-          }
+        guard !Self.isSimulator else {
+          result(
+            FlutterError(
+              code: "AIRPLAY_UNAVAILABLE",
+              message: "AirPlay route picking is unavailable in the iOS simulator.",
+              details: nil
+            )
+          )
+          return
         }
+
+        // The native AVPlayerViewController is already presented by loadAirPlay.
         result(nil)
+      case "isAirPlayRoutePickerAvailable":
+        result(!Self.isSimulator)
       case "pauseGoogleCast":
         self.withGoogleCastRemoteClient(result: result) { remoteClient in
           remoteClient.pause()
@@ -567,14 +591,27 @@ private final class NativeAirPlayEventStreamHandler: NSObject, FlutterStreamHand
           )
           return
         }
+        guard let vc = self.topViewController(from: controller) else {
+          result(
+            FlutterError(
+              code: "NO_VIEW_CONTROLLER",
+              message: "Missing root FlutterViewController.",
+              details: nil
+            )
+          )
+          return
+        }
         let title = args["title"] as? String ?? ""
         let positionTicks = (args["positionTicks"] as? NSNumber)?.int64Value ?? 0
         let positionSeconds = Double(positionTicks) / 10_000_000.0
-        self.airPlayController.preparePendingContent(
-          urlString: url,
-          title: title,
-          positionSeconds: positionSeconds
-        )
+        DispatchQueue.main.async {
+          self.airPlayController.presentPlayerForAirPlay(
+            urlString: url,
+            title: title,
+            positionSeconds: positionSeconds,
+            from: vc
+          )
+        }
         result(nil)
       case "updateAirPlayPlaybackState":
         guard let args = call.arguments as? [String: Any],

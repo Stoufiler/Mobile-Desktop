@@ -20,9 +20,18 @@ Future<void> showRemotePlayToSessionDialog(
 
   final picked = await showModalBottomSheet<CastTarget>(
     context: context,
+    useRootNavigator: true,
     showDragHandle: true,
-    builder: (ctx) => _CastTargetSheet(
-      stream: castService.discoverTargetsStreamed(item),
+    isScrollControlled: true,
+    builder: (ctx) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.55,
+      minChildSize: 0.25,
+      maxChildSize: 0.85,
+      builder: (_, scrollController) => _CastTargetSheet(
+        stream: castService.discoverTargetsStreamed(item),
+        scrollController: scrollController,
+      ),
     ),
   );
 
@@ -38,9 +47,11 @@ Future<void> showRemotePlayToSessionDialog(
       subtitleStreamIndex: subtitleStreamIndex,
     );
     if (!context.mounted) return;
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Casting started on selected device')),
-    );
+    if (picked.kind != CastTargetKind.airPlay) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Casting started on selected device')),
+      );
+    }
   } catch (e) {
     if (!context.mounted) return;
     messenger.showSnackBar(
@@ -51,7 +62,12 @@ Future<void> showRemotePlayToSessionDialog(
 
 class _CastTargetSheet extends StatefulWidget {
   final Stream<CastTarget> stream;
-  const _CastTargetSheet({required this.stream});
+  final ScrollController scrollController;
+
+  const _CastTargetSheet({
+    required this.stream,
+    required this.scrollController,
+  });
 
   @override
   State<_CastTargetSheet> createState() => _CastTargetSheetState();
@@ -98,35 +114,45 @@ class _CastTargetSheetState extends State<_CastTargetSheet> {
       return const SafeArea(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: Center(child: Text('No remote playback devices available')),
+          child: Center(
+            child: Text(
+              'No remote playback devices available.\n\nOn the iOS simulator, AirPlay targets are not available.',
+              textAlign: TextAlign.center,
+            ),
+          ),
         ),
       );
     }
 
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListView.separated(
-            shrinkWrap: true,
-            itemCount: _targets.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (_, index) {
-              final target = _targets[index];
-              return ListTile(
-                leading: Icon(_iconForTargetKind(target.kind)),
-                title: Text(target.title),
-                subtitle: target.subtitle.isNotEmpty ? Text(target.subtitle) : null,
-                onTap: () => Navigator.of(context).pop(target),
-              );
-            },
-          ),
-          if (loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: CircularProgressIndicator(),
+      child: Material(
+        color: Theme.of(context).bottomSheetTheme.backgroundColor,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Expanded(
+              child: ListView.separated(
+                controller: widget.scrollController,
+                itemCount: _targets.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, index) {
+                  final target = _targets[index];
+                  return ListTile(
+                    leading: Icon(_iconForTargetKind(target.kind)),
+                    title: Text(target.title),
+                    subtitle: target.subtitle.isNotEmpty ? Text(target.subtitle) : null,
+                    onTap: () => Navigator.of(context).pop(target),
+                  );
+                },
+              ),
             ),
-        ],
+            if (loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: CircularProgressIndicator(),
+              ),
+          ],
+        ),
       ),
     );
   }
